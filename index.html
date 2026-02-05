@@ -1,0 +1,2313 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aplikasi Keuangan Sekolah</title>
+  
+  <!-- Menggunakan Tailwind CSS dengan cara yang lebih stabil -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Konfigurasi Tailwind untuk menghindari warning
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {},
+      }
+    }
+  </script>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Library untuk Export PDF -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <style>
+    /* Custom style for smooth accordion */
+    .accordion-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+    .accordion-content.active {
+      max-height: 800px; /* Adjust as needed */
+      transition: max-height 0.3s ease-in;
+    }
+    
+    /* Style for print - DIPERBAIKI UNTUK KOP DAN FOOTER */
+    @media print {
+      body {
+        font-family: 'Times New Roman', serif;
+        font-size: 12pt;
+        line-height: 1.5;
+        color: black;
+        background: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .no-print { display: none !important; }
+      .print-break { page-break-inside: avoid; }
+      /* Mencegah baris tabel terpotong */
+      tr { page-break-inside: avoid; }
+      /* Mengatur layout untuk cetakan */
+      body > div { display: block !important; width: 100% !important; }
+      aside { display: none !important; }
+      main {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #reportContent {
+        margin: 1cm;
+        box-shadow: none !important;
+        border: none !important;
+        background: white !important;
+      }
+      /* Gaya untuk tanda tangan - DIPERBAIKI JARAKNYA */
+      .signature-container {
+          margin-top: 60px; /* Menambah jarak atas */
+          page-break-inside: avoid;
+      }
+      .signature-line {
+        border-bottom: 1px solid black;
+        height: 40px;
+        margin-bottom: 5px;
+      }
+      /* Watermark untuk cetakan */
+      .watermark {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-45deg);
+        font-size: 100px;
+        opacity: 0.1;
+        z-index: -1;
+        color: #000;
+      }
+      /* Nomor halaman */
+      .page-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+      }
+      .page-footer:after {
+        content: counter(page);
+      }
+      /* Kop Surat Resmi */
+      .kop-surat {
+        border-bottom: 3px double black;
+        padding-bottom: 10px;
+        margin-bottom: 10px; /* <-- DIUBAH MENJADI 10px */
+        line-height: 1.2; /* Mengatur jarak antar baris menjadi 1.2 */
+        margin: 2px 0;    /* Mengurangi jarak atas/bawah paragraf */
+      }
+    }
+
+    /* Style for form (untuk tampilan layar) */
+    .signature-line-screen {
+      height: 1px;
+      background-color: #9CA3AF;
+      margin: 8px 0;
+    }
+    
+    /* Style untuk PDF */
+    .pdf-page {
+      position: relative;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 10mm;
+      background: white;
+      box-sizing: border-box;
+    }
+    
+    /* Nomor halaman untuk PDF */
+    .pdf-page-number {
+      position: absolute;
+      bottom: 5mm;
+      right: 10mm;
+      font-size: 10px;
+      color: #666;
+    }
+    
+    /* Tambahan untuk memastikan tampilan */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    
+    /* Loading state */
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #1f2937;
+      color: white;
+    }
+    
+    /* Total card styling */
+    .total-card {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3);
+    }
+    
+    /* --- GAYA KHUSUS UNTUK CETAK COVER (DIPERBAIKI) --- */
+    @media print {
+      /* Saat mencetak, beri jarak di atas dan hilangkan jarak lainnya */
+      body.cover-print-layout {
+        margin: -5mm 0 0 0 !important; /* Tambahkan margin atas 15mm */
+        padding: 0 !important;
+        height: 100vh !important;
+        overflow: hidden !important;
+      }
+
+      /* Hapus semua jarak pada elemen utama */
+      body.cover-print-layout #app,
+      body.cover-print-layout main {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Sesuaikan tinggi konten dengan mengurangi margin atas yang baru ditambahkan */
+      body.cover-print-layout #reportContent {
+        margin: 0 !important;
+        padding: 20mm !important; /* Padding dalam konten */
+        height: calc(100vh - 15mm) !important; /* KURANGI 15mm untuk kompensasi margin atas */
+        box-sizing: border-box !important;
+        box-shadow: none !important;
+        border: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+      }
+    }
+
+    /* Custom styling for menu items with different background colors */
+    .menu-item {
+      transition: all 0.3s ease;
+      border-radius: 0.375rem;
+    }
+
+    /* Background colors for each menu */
+    #menu-dasbor { background-color: #1e40af; } /* Blue */
+    #menu-profil { background-color: #0891b2; } /* Cyan */
+    #menu-rapbs { background-color: #7c3aed; } /* Purple */
+    #menu-pendapatan { background-color: #16a34a; } /* Green */
+    #menu-pengeluaran { background-color: #dc2626; } /* Red */
+    #menu-laporan { background-color: #ea580c; } /* Orange */
+    #menu-save-all { background-color: #db2777; } /* Pink */
+    #menu-reset-all { background-color: #dc2626; } /* Red */
+
+    /* Hover effects */
+    .menu-item:hover {
+      opacity: 0.9;
+      transform: translateX(4px);
+    }
+
+    /* Active state */
+    .menu-item.active {
+      opacity: 1;
+      transform: translateX(8px);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Style khusus untuk input angka */
+    .number-input {
+      text-align: right;
+    }
+    
+    /* Warning box styling */
+    .warning-box {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border-left: 4px solid #f59e0b;
+    }
+    
+    .danger-box {
+      background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+      border-left: 4px solid #dc2626;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-0">
+  <!-- Watermark untuk cetakan -->
+  <div class="watermark no-print" style="display: none;">SMP NEGERI 1 JAKARTA</div>
+  
+  <div id="app" class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-64 bg-gray-800 border-r border-gray-700 p-6 transition-transform duration-300 ease-in-out fixed md:relative md:translate-x-0 -translate-x-full z-40 h-full overflow-y-auto no-print">
+      <h2 class="text-xl font-bold mb-6">Aplikasi Keuangan by ZASE</h2>
+      <ul class="space-y-2">
+        <li><a href="#" id="menu-dasbor" onclick="loadDasbor()" class="menu-item block p-2 hover:bg-gray-700 rounded"><i class="fas fa-tachometer-alt mr-2" style="color: #60A5FA;"></i>Dasbor</a></li>
+        
+        <!-- Profil Sekolah dengan Sub-Menu -->
+        <li>
+          <a href="#" id="menu-profil" onclick="toggleSubmenu('profil-submenu', 'menu-profil')" class="menu-item block p-2 hover:bg-gray-700 rounded">
+            <i class="fas fa-user mr-2" style="color: #22D3EE;"></i> Profil Sekolah <span id="profil-arrow" class="float-right transition-transform duration-300">▶</span>
+          </a>
+          <ul id="profil-submenu" class="accordion-content pl-4 mt-2 space-y-1">
+            <li><a href="#" id="menu-profil-sekolah" onclick="loadProfil()" class="block p-2 hover:bg-gray-700 rounded text-sm">Identitas Sekolah</a></li>
+            <li><a href="#" id="menu-upload-logo" onclick="loadUploadLogo()" class="block p-2 hover:bg-gray-700 rounded text-sm">Upload Logo</a></li>
+            <li><a href="#" id="menu-tanggal-laporan" onclick="loadTanggalLaporan()" class="block p-2 hover:bg-gray-700 rounded text-sm">Tanggal Pelaporan</a></li>
+            <li><a href="#" id="menu-upload-json" onclick="showUploadJsonForm()" class="block p-2 hover:bg-gray-700 rounded text-sm">Upload Data (JSON)</a></li>
+          </ul>
+        </li>
+        
+        <!-- RAPBS dengan Sub-Menu (RENCANA PENGELUARAN DIPINDAH KESINI) -->
+        <li>
+          <a href="#" id="menu-rapbs" onclick="toggleSubmenu('rapbs-submenu', 'menu-rapbs')" class="menu-item block p-2 hover:bg-gray-700 rounded">
+            <i class="fas fa-chart-line mr-2" style="color: #C084FC;"></i> RAPBS <span id="rapbs-arrow" class="float-right transition-transform duration-300">▶</span>
+          </a>
+          <ul id="rapbs-submenu" class="accordion-content pl-4 mt-2 space-y-1">
+            <li><a href="#" id="menu-buat-akun-rapbs" onclick="loadBuatAkunRAPBS()" class="block p-2 hover:bg-gray-700 rounded text-sm">Buat Akun</a></li>
+            <li><a href="#" id="menu-input-rapbs" onclick="loadInputRAPBS()" class="block p-2 hover:bg-gray-700 rounded text-sm">Rencana Pendapatan</a></li>
+            <!-- RENCANA PENGELUARAN DIPINDAH KESINI -->
+            <li><a href="#" id="menu-rencana-pengeluaran" onclick="loadRencanaPengeluaran()" class="block p-2 hover:bg-gray-700 rounded text-sm">Rencana Pengeluaran</a></li>
+          </ul>
+        </li>
+
+        <!-- Pendapatan dengan Sub-Menu -->
+        <li>
+          <a href="#" id="menu-pendapatan" onclick="toggleSubmenu('pendapatan-submenu', 'menu-pendapatan')" class="menu-item block p-2 hover:bg-gray-700 rounded">
+            <i class="fas fa-coins mr-2" style="color: #4ADE80;"></i> Pendapatan <span id="pendapatan-arrow" class="float-right transition-transform duration-300">▶</span>
+          </a>
+          <ul id="pendapatan-submenu" class="accordion-content pl-4 mt-2 space-y-1">
+            <li><a href="#" id="menu-buat-akun" onclick="loadBuatAkun()" class="block p-2 hover:bg-gray-700 rounded text-sm">Buat Akun</a></li>
+            <li><a href="#" id="menu-input-pendapatan" onclick="loadInputPendapatan()" class="block p-2 hover:bg-gray-700 rounded text-sm">Input Pendapatan</a></li>
+            <li><a href="#" id="menu-simpan-pendapatan" onclick="savePendapatanData()" class="block p-2 hover:bg-gray-700 rounded text-sm">💾 Simpan Data</a></li>
+          </ul>
+        </li>
+
+        <!-- Pengeluaran dengan Sub-Menu (RENCANA PENGELUARAN DIPINDAH) -->
+        <li>
+          <a href="#" id="menu-pengeluaran" onclick="toggleSubmenu('pengeluaran-submenu', 'menu-pengeluaran')" class="menu-item block p-2 hover:bg-gray-700 rounded">
+            <i class="fas fa-money-bill-transfer mr-2" style="color: #F87171;"></i> Pengeluaran <span id="pengeluaran-arrow" class="float-right transition-transform duration-300">▶</span>
+          </a>
+          <ul id="pengeluaran-submenu" class="accordion-content pl-4 mt-2 space-y-1">
+            <li><a href="#" id="menu-buat-akun-pengeluaran" onclick="loadBuatAkunPengeluaran()" class="block p-2 hover:bg-gray-700 rounded text-sm">Buat Akun</a></li>
+            <li><a href="#" id="menu-input-pengeluaran" onclick="loadInputPengeluaran()" class="block p-2 hover:bg-gray-700 rounded text-sm">Input Pengeluaran</a></li>
+            <!-- RENCANA PENGELUARAN DIPINDAH KE RAPBS -->
+          </ul>
+        </li>
+
+        <!-- Laporan Keuangan dengan Sub-Menu -->
+        <li>
+          <a href="#" id="menu-laporan" onclick="toggleSubmenu('laporan-submenu', 'menu-laporan')" class="menu-item block p-2 hover:bg-gray-700 rounded">
+            <i class="fas fa-file-invoice-dollar mr-2" style="color: #FB923C;"></i> Laporan Keuangan <span id="laporan-arrow" class="float-right transition-transform duration-300">▶</span>
+          </a>
+          <ul id="laporan-submenu" class="accordion-content pl-4 mt-2 space-y-1">
+            <li><a href="#" id="menu-laporan-pendapatan" onclick="loadLaporanPendapatan()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Pendapatan</a></li>
+            <li><a href="#" id="menu-laporan-rekap-pengeluaran" onclick="loadLaporanRekapPengeluaran()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Rekap. Pengeluaran</a></li>
+            <li><a href="#" id="menu-laporan-jurnal" onclick="loadLaporanJurnal()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Jurnal Umum</a></li>
+            <li><a href="#" id="menu-laporan-rincian-pengeluaran" onclick="loadLaporanRincianPengeluaran()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Rincian Pengeluaran</a></li>
+            <li><a href="#" id="menu-laporan-rugi-laba" onclick="loadLaporanRugiLaba()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Rugi Laba</a></li>
+            <li><a href="#" id="menu-laporan-realisasi" onclick="loadLaporanRealisasi()" class="block p-2 hover:bg-gray-700 rounded text-sm">Laporan Realisasi Anggaran</a></li>
+            <li><a href="#" id="menu-cetak-cover" onclick="loadCetakCover()" class="block p-2 hover:bg-gray-700 rounded text-sm">Cetak Cover</a></li>
+          </ul>
+        </li>
+        
+        <!-- Tombol Simpan Semua Data -->
+        <li>
+          <a href="#" id="menu-save-all" onclick="saveAllData()" class="menu-item block p-2 hover:bg-gray-700 rounded border-t border-gray-700 mt-4 pt-4">
+            <i class="fas fa-download mr-2" style="color: #F472B6;"></i>Backup Semua Data
+          </a>
+        </li>
+        
+        <!-- Tombol Reset Semua Data -->
+        <li>
+          <a href="#" id="menu-reset-all" onclick="showResetConfirmation()" class="menu-item block p-2 hover:bg-gray-700 rounded border-t border-gray-700 mt-4 pt-4">
+            <i class="fas fa-trash-alt mr-2" style="color: #FCA5A5;"></i>Reset Semua Data
+          </a>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- Tombol buka/tutup sidebar (mobile) -->
+    <button id="toggleSidebar" class="md:hidden fixed top-4 left-4 z-50 bg-indigo-600 p-2 rounded no-print">☰</button>
+
+    <!-- Konten Utama -->
+    <main class="flex-1 p-6 md:ml-0" id="contentArea">
+      <!-- Loading state -->
+      <div id="loadingState" class="loading">
+        <div class="text-center">
+          <i class="fas fa-spinner fa-spin text-4xl mb-4"></i>
+          <p>Memuat aplikasi...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // --- GLOBAL & SIDEBAR ---
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('toggleSidebar');
+    toggle.addEventListener('click', () => { sidebar.classList.toggle('-translate-x-full'); });
+    
+    // Tambahkan variabel global untuk melacak submenu yang terbuka
+    let currentlyOpenSubmenu = null;
+    
+    function toggleSubmenu(submenuId, parentId) {
+      const submenu = document.getElementById(submenuId);
+      const arrow = document.getElementById(submenuId.replace('-submenu', '-arrow'));
+      
+      // Jika ada submenu yang terbuka, tutup terlebih dahulu
+      if (currentlyOpenSubmenu && currentlyOpenSubmenu !== submenu) {
+        currentlyOpenSubmenu.classList.remove('active');
+        const prevArrow = document.getElementById(currentlyOpenSubmenu.id.replace('-submenu', '-arrow'));
+        if (prevArrow) prevArrow.classList.remove('rotate-90');
+      }
+      
+      // Toggle submenu yang diklik
+      submenu.classList.toggle('active'); 
+      arrow.classList.toggle('rotate-90');
+      
+      // Update referensi submenu yang terbuka
+      if (submenu.classList.contains('active')) {
+        currentlyOpenSubmenu = submenu;
+      } else {
+        currentlyOpenSubmenu = null;
+      }
+      
+      setActiveMenu(parentId);
+    }
+    
+    function setActiveMenu(menuId) {
+      document.querySelectorAll('.menu-item').forEach(item => { item.classList.remove('active'); });
+      const activeItem = document.getElementById(menuId);
+      if(activeItem) { activeItem.classList.add('active'); }
+      
+      // Handle khusus untuk menu rencana pengeluaran yang dipindah ke RAPBS
+      if (menuId === 'menu-rencana-pengeluaran') {
+        // Aktifkan parent menu RAPBS juga
+        const rapbsMenu = document.getElementById('menu-rapbs');
+        if (rapbsMenu) rapbsMenu.classList.add('active');
+      }
+      
+      if (window.innerWidth < 768) { sidebar.classList.add('-translate-x-full'); }
+    }
+    
+    // --- FUNGSI RESET DATA ---
+    function showResetConfirmation() {
+      setActiveMenu('menu-reset-all');
+      
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-6">Reset Semua Data</h1>
+        
+        <div class="danger-box p-6 rounded-lg mb-6 border border-red-300">
+          <div class="flex items-start">
+            <div class="text-red-600 text-2xl mr-3">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-red-800 mb-2">PERHATIAN! TINDAKAN BERBAHAYA</h2>
+              <p class="text-red-700 mb-3">
+                Tindakan ini akan menghapus <span class="font-bold">SEMUA DATA</span> dari aplikasi keuangan sekolah, termasuk:
+              </p>
+              <ul class="list-disc pl-5 text-red-700 mb-4 space-y-1">
+                <li>Profil sekolah dan logo</li>
+                <li>Semua akun pendapatan dan pengeluaran</li>
+                <li>Data RAPBS dan rencana pengeluaran</li>
+                <li>Semua transaksi pendapatan dan pengeluaran</li>
+                <li>Pengaturan tanggal laporan</li>
+                <li>Semua laporan yang tersimpan</li>
+              </ul>
+              <p class="text-red-800 font-bold">
+                Tindakan ini TIDAK DAPAT DIBATALKAN! Pastikan Anda telah mem-backup data sebelum melanjutkan.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h3 class="text-lg font-semibold mb-4 text-yellow-400">Konfirmasi Reset Data</h3>
+          <p class="mb-4">Untuk mengonfirmasi penghapusan semua data, ketik "<span class="font-bold text-red-400">RESET DATA</span>" di bawah ini:</p>
+          
+          <div class="mb-6">
+            <input type="text" id="resetConfirmationInput" class="bg-gray-900 border border-gray-700 p-3 rounded w-full text-center text-lg" placeholder="Ketik: RESET DATA" />
+            <p class="text-sm text-gray-400 mt-2">Harap ketik persis seperti yang diminta</p>
+          </div>
+          
+          <div class="flex flex-col md:flex-row gap-3">
+            <button onclick="resetAllData()" class="bg-red-600 hover:bg-red-700 p-3 rounded font-bold flex-1 flex items-center justify-center">
+              <i class="fas fa-trash-alt mr-2"></i> HAPUS SEMUA DATA
+            </button>
+            <button onclick="loadDasbor()" class="bg-gray-600 hover:bg-gray-700 p-3 rounded flex-1 flex items-center justify-center">
+              <i class="fas fa-times mr-2"></i> Batalkan
+            </button>
+          </div>
+        </div>
+      `;
+    }
+    
+    function resetAllData() {
+      const input = document.getElementById('resetConfirmationInput');
+      const confirmationText = input.value.trim();
+      
+      if (confirmationText !== 'RESET DATA') {
+        alert('Kata konfirmasi tidak sesuai. Harap ketik "RESET DATA" dengan huruf besar.');
+        return;
+      }
+      
+      // Konfirmasi ulang
+      if (!confirm('APAKAH ANDA BENAR-BENAR YAKIN?\n\nIni akan menghapus SEMUA data dan tidak dapat dikembalikan!')) {
+        return;
+      }
+      
+      // Hapus semua data dari localStorage
+      localStorage.removeItem('profilSekolah');
+      localStorage.removeItem('laporanSettings');
+      localStorage.removeItem('akunPendapatan');
+      localStorage.removeItem('pendapatan');
+      localStorage.removeItem('akunPengeluaran');
+      localStorage.removeItem('pengeluaran');
+      localStorage.removeItem('rencanaPengeluaran');
+      localStorage.removeItem('akunRAPBS');
+      localStorage.removeItem('rapbs');
+      
+      // Tampilkan pesan sukses
+      document.getElementById('contentArea').innerHTML = `
+        <div class="text-center py-12">
+          <div class="text-green-500 text-5xl mb-4">
+            <i class="fas fa-check-circle"></i>
+          </div>
+          <h2 class="text-2xl font-bold mb-4">Data Berhasil Dihapus!</h2>
+          <p class="text-gray-300 mb-8">Semua data aplikasi keuangan sekolah telah berhasil direset.</p>
+          <button onclick="loadDasbor()" class="bg-blue-600 hover:bg-blue-700 p-3 rounded-lg font-bold">
+            <i class="fas fa-home mr-2"></i> Kembali ke Dashboard
+          </button>
+        </div>
+      `;
+    }
+    
+    // --- FUNGSI FORMAT INPUT ANGKA ---
+    function formatInputNumber(input) {
+      // Hapus semua karakter non-digit
+      let value = input.value.replace(/[^\d]/g, '');
+      
+      // Simpan posisi kursor
+      let cursorPosition = input.selectionStart;
+      let originalLength = input.value.length;
+      
+      // Format dengan titik ribuan
+      if (value !== '') {
+        // Konversi ke number dan format
+        let num = parseInt(value);
+        if (!isNaN(num)) {
+          input.value = formatNumber(num);
+          
+          // Hitung posisi kursor baru
+          let newLength = input.value.length;
+          let lengthDiff = newLength - originalLength;
+          let newCursorPosition = Math.max(cursorPosition + lengthDiff, 0);
+          
+          // Set posisi kursor kembali
+          input.setSelectionRange(newCursorPosition, newCursorPosition);
+        }
+      } else {
+        input.value = '';
+      }
+    }
+    
+    function parseFormattedNumber(formattedString) {
+      // Hapus titik dan konversi ke angka
+      return parseInt(formattedString.replace(/\./g, '')) || 0;
+    }
+    
+    // Fungsi untuk menginisialisasi event listener pada input angka
+    function initializeNumberInputs() {
+      // Tunggu sedikit agar DOM selesai dirender
+      setTimeout(() => {
+        const numberInputs = document.querySelectorAll('input[type="number"], input.number-input');
+        numberInputs.forEach(input => {
+          // Ubah type menjadi text untuk mencegah panah atas/bawah default
+          input.type = 'text';
+          input.classList.add('number-input');
+          
+          // Format saat kehilangan fokus
+          input.addEventListener('blur', function() {
+            formatInputNumber(this);
+          });
+          
+          // Format saat input berubah (real-time)
+          input.addEventListener('input', function(e) {
+            // Simpan posisi kursor
+            let cursorPosition = this.selectionStart;
+            let value = this.value;
+            
+            // Hapus semua karakter non-digit
+            let newValue = value.replace(/[^\d]/g, '');
+            
+            // Jika ada perubahan, format
+            if (newValue !== value.replace(/\./g, '')) {
+              this.value = newValue;
+              formatInputNumber(this);
+              
+              // Kembalikan kursor ke posisi yang sesuai
+              let newCursorPosition = Math.max(cursorPosition - (value.length - newValue.length), 0);
+              this.setSelectionRange(newCursorPosition, newCursorPosition);
+            }
+          });
+          
+          // Mencegah karakter non-digit
+          input.addEventListener('keydown', function(e) {
+            // Izinkan: backspace, delete, tab, escape, enter, panah kiri/kanan
+            if ([46, 8, 9, 27, 13, 37, 39].indexOf(e.keyCode) !== -1 ||
+                // Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                (e.keyCode === 65 && e.ctrlKey === true) || 
+                (e.keyCode === 67 && e.ctrlKey === true) ||
+                (e.keyCode === 86 && e.ctrlKey === true) ||
+                (e.keyCode === 88 && e.ctrlKey === true) ||
+                // Tanda minus untuk angka negatif (opsional)
+                (e.keyCode === 189 && e.keyCode === 109)) {
+              return;
+            }
+            
+            // Pastikan itu angka
+            if ((e.keyCode < 48 || e.keyCode > 57) && (e.keyCode < 96 || e.keyCode > 105)) {
+              e.preventDefault();
+            }
+          });
+        });
+      }, 100);
+    }
+
+    // --- DASHBOARD ---
+    function loadDasbor() {
+      setActiveMenu('menu-dasbor');
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-6">Dasbor</h1>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="bg-gradient-to-r from-green-600 to-green-700 p-6 rounded-lg shadow-lg"><div class="flex items-center justify-between"><div><p class="text-green-100">Total Pendapatan</p><p class="text-3xl font-bold mt-2">Rp ${formatNumber(getTotalPendapatan())}</p></div><i class="fas fa-arrow-trend-up text-4xl text-green-300"></i></div></div>
+          <div class="bg-gradient-to-r from-red-600 to-red-700 p-6 rounded-lg shadow-lg"><div class="flex items-center justify-between"><div><p class="text-red-100">Total Pengeluaran</p><p class="text-3xl font-bold mt-2">Rp ${formatNumber(getTotalPengeluaran())}</p></div><i class="fas fa-arrow-trend-down text-4xl text-red-300"></i></div></div>
+          <div class="bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-lg shadow-lg"><div class="flex items-center justify-between"><div><p class="text-blue-100">Saldo</p><p class="text-3xl font-bold mt-2">Rp ${formatNumber(getSaldo())}</p></div><i class="fas fa-wallet text-4xl text-blue-300"></i></div></div>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg">
+          <h2 class="text-xl font-semibold mb-4 pb-2 border-b border-gray-700"><i class="fas fa-building-columns mr-2 text-indigo-400"></i>Identitas Sekolah</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="flex items-start space-x-3"><div class="text-2xl text-indigo-400 mt-1"><i class="fas fa-building"></i></div><div><p class="text-sm text-gray-400">Nama Lembaga Induk</p><p class="font-semibold text-lg" id="viewLembaga">-</p></div></div>
+            <div class="flex items-start space-x-3"><div class="text-2xl text-indigo-400 mt-1"><i class="fas fa-school"></i></div><div><p class="text-sm text-gray-400">Nama Sekolah</p><p class="font-semibold text-lg" id="viewSekolah">-</p></div></div>
+            <div class="flex items-start space-x-3"><div class="text-2xl text-indigo-400 mt-1"><i class="fas fa-user-tie"></i></div><div><p class="text-sm text-gray-400">Kepala Sekolah</p><p class="font-semibold text-lg" id="viewKepsek">-</p></div></div>
+            <div class="flex items-start space-x-3"><div class="text-2xl text-indigo-400 mt-1"><i class="fas fa-coins"></i></div><div><p class="text-sm text-gray-400">Nama Bendahara</p><p class="font-semibold text-lg" id="viewBendahara">-</p></div></div>
+            <div class="flex items-start space-x-3"><div class="text-2xl text-indigo-400 mt-1"><i class="fas fa-calendar-days"></i></div><div><p class="text-sm text-gray-400">Tahun Anggaran</p><p class="font-semibold text-lg" id="viewTahun">-</p></div></div>
+          </div>
+        </div>`;
+      loadProfilData();
+    }
+
+    // --- PROFIL SEKOLAH & TANGGAL LAPORAN ---
+    function loadProfil() { 
+      setActiveMenu('menu-profil-sekolah'); 
+      const profil = JSON.parse(localStorage.getItem('profilSekolah')) || {};
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Identitas Sekolah</h1>
+        <form id="formProfil" class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <div class="flex flex-col"><label class="text-sm mb-1">Nama Lembaga Induk</label><input id="inLembaga" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.lembaga || ''}" required /></div>
+          <div class="flex flex-col"><label class="text-sm mb-1">Nama Sekolah</label><input id="inSekolah" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.sekolah || ''}" required /></div>
+          <div class="flex flex-col"><label class="text-sm mb-1">Alamat Sekolah</label><input id="inAlamat" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.alamat || ''}" required /></div>
+          <div class="flex flex-col"><label class="text-sm mb-1">Kepala Sekolah</label><input id="inKepsek" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.kepsek || ''}" required /></div>
+          <div class="flex flex-col"><label class="text-sm mb-1">Nama Bendahara</label><input id="inBendahara" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.bendahara || ''}" required /></div>
+          <div class="flex flex-col"><label class="text-sm mb-1">Tahun Anggaran</label><input id="inTahun" type="number" class="bg-gray-900 border border-gray-700 p-2 rounded" value="${profil.tahun || ''}" required /></div>
+          <div class="md:col-span-2"><button onclick="saveProfil()" type="button" class="bg-blue-600 hover:bg-blue-700 p-2 rounded w-full md:w-auto">Simpan Identitas</button></div>
+        </form>
+      `; 
+    }
+    
+    function saveProfil() { 
+      const d = { 
+        lembaga: document.getElementById('inLembaga').value, 
+        sekolah: document.getElementById('inSekolah').value,
+        alamat: document.getElementById('inAlamat').value,
+        kepsek: document.getElementById('inKepsek').value, 
+        bendahara: document.getElementById('inBendahara').value, 
+        tahun: document.getElementById('inTahun').value,
+        logo: JSON.parse(localStorage.getItem('profilSekolah'))?.logo || null // Pertahankan logo lama jika tidak ada upload baru
+      }; 
+      if (!d.lembaga || !d.sekolah || !d.alamat || !d.kepsek || !d.bendahara || !d.tahun) { alert('Semua field harus diisi!'); return; } 
+      localStorage.setItem('profilSekolah', JSON.stringify(d)); 
+      alert('Identitas sekolah berhasil disimpan!'); 
+    }
+    
+    function loadProfilData() { 
+      const d = JSON.parse(localStorage.getItem('profilSekolah')) || {}; 
+      document.getElementById('viewLembaga').innerText = d.lembaga || '-'; 
+      document.getElementById('viewSekolah').innerText = d.sekolah || '-';
+      document.getElementById('viewAlamat') ? document.getElementById('viewAlamat').innerText = d.alamat || '-' : null; // Handle if element doesn't exist
+      document.getElementById('viewKepsek').innerText = d.kepsek || '-'; 
+      document.getElementById('viewBendahara').innerText = d.bendahara || '-'; 
+      document.getElementById('viewTahun').innerText = d.tahun || '-'; 
+    }
+
+    // --- UPLOAD LOGO ---
+    function loadUploadLogo() {
+      setActiveMenu('menu-upload-logo');
+      const currentLogo = JSON.parse(localStorage.getItem('profilSekolah'))?.logo || '';
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Upload Logo Sekolah</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label for="logoUpload" class="block text-sm font-medium mb-2">Pilih File Logo (PNG/JPG)</label>
+              <input type="file" id="logoUpload" accept="image/*" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+              <button onclick="saveLogo()" type="button" class="mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Simpan Logo</button>
+            </div>
+            <div class="text-center">
+              <p class="text-sm text-gray-400 mb-2">Preview Logo Saat Ini:</p>
+              <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 min-h-[100px] flex items-center justify-center">
+                ${currentLogo ? `<img src="${currentLogo}" alt="Logo Sekolah" style="max-height: 100px; max-width: 150px;">` : '<span class="text-gray-500">Belum ada logo</span>'}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveLogo() {
+        const fileInput = document.getElementById('logoUpload');
+        if (fileInput.files.length === 0) {
+            alert('Silakan pilih file logo terlebih dahulu.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const logoDataUrl = event.target.result;
+            let profil = JSON.parse(localStorage.getItem('profilSekolah')) || {};
+            profil.logo = logoDataUrl;
+            localStorage.setItem('profilSekolah', JSON.stringify(profil));
+            alert('Logo berhasil disimpan!');
+            loadUploadLogo(); // Refresh untuk menampilkan preview baru
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+    }
+    
+    function loadTanggalLaporan() {
+      setActiveMenu('menu-tanggal-laporan');
+      const settings = JSON.parse(localStorage.getItem('laporanSettings')) || {};
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-6">Pengaturan Tanggal Pelaporan</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <form id="formTanggalLaporan" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col"><label for="tanggalLaporanInput" class="text-sm mb-1">Tanggal Pelaporan</label><input type="date" id="tanggalLaporanInput" class="bg-gray-900 border border-gray-700 p-2 rounded" required /><p class="text-xs text-gray-400 mt-1">Tanggal ini akan dicetak di semua laporan.</p></div>
+            <div class="flex items-end"><button type="button" onclick="saveTanggalLaporan()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Simpan Tanggal</button></div>
+          </form>
+        </div>
+      `;
+      document.getElementById('tanggalLaporanInput').value = settings.tanggalLaporan || '';
+    }
+
+    function saveTanggalLaporan() {
+      const tanggal = document.getElementById('tanggalLaporanInput').value;
+      if (!tanggal) { alert('Silakan pilih tanggal pelaporan.'); return; }
+      let settings = JSON.parse(localStorage.getItem('laporanSettings')) || {};
+      settings.tanggalLaporan = tanggal;
+      localStorage.setItem('laporanSettings', JSON.stringify(settings));
+      alert('Tanggal pelaporan berhasil disimpan!');
+    }
+
+    // --- UPLOAD JSON ---
+    function showUploadJsonForm() {
+      setActiveMenu('menu-upload-json');
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-6">Upload Data dari File JSON</h1>
+        <div class="bg-yellow-800 border border-yellow-600 text-yellow-100 p-4 rounded-lg mb-6">
+          <p class="font-semibold">Perhatian!</p>
+          <p class="text-sm">Tindakan ini akan menimpa (overwrite) SEMUA data yang ada saat ini. Pastikan Anda telah mem-backup data terbaru sebelum melanjutkan.</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <div class="flex flex-col">
+            <label for="jsonFileInput" class="text-sm mb-2">Pilih File Backup (.json)</label>
+            <input type="file" id="jsonFileInput" accept=".json" class="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+          </div>
+          <button onclick="uploadDataFromJSON()" type="button" class="mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+            <i class="fas fa-upload mr-2"></i>Upload dan Timpa Data
+          </button>
+        </div>
+      `;
+    }
+
+    function uploadDataFromJSON() {
+      const fileInput = document.getElementById('jsonFileInput');
+      if (fileInput.files.length === 0) {
+        alert('Silakan pilih file JSON terlebih dahulu.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (typeof data !== 'object' || data === null) {
+            throw new Error("File JSON tidak valid atau kosong.");
+          }
+
+          const isConfirmed = confirm('Apakah Anda yakin ingin menimpa semua data saat ini dengan data dari file ini? Tindakan ini tidak dapat dibatalkan.');
+          if (!isConfirmed) return;
+
+          // Simpan setiap bagian data ke localStorage
+          if (data.profilSekolah) localStorage.setItem('profilSekolah', JSON.stringify(data.profilSekolah));
+          if (data.laporanSettings) localStorage.setItem('laporanSettings', JSON.stringify(data.laporanSettings));
+          if (data.akunPendapatan) localStorage.setItem('akunPendapatan', JSON.stringify(data.akunPendapatan));
+          if (data.pendapatan) localStorage.setItem('pendapatan', JSON.stringify(data.pendapatan));
+          if (data.akunPengeluaran) localStorage.setItem('akunPengeluaran', JSON.stringify(data.akunPengeluaran));
+          if (data.pengeluaran) localStorage.setItem('pengeluaran', JSON.stringify(data.pengeluaran));
+          if (data.rencanaPengeluaran) localStorage.setItem('rencanaPengeluaran', JSON.stringify(data.rencanaPengeluaran));
+          if (data.akunRAPBS) localStorage.setItem('akunRAPBS', JSON.stringify(data.akunRAPBS));
+          if (data.rapbs) localStorage.setItem('rapbs', JSON.stringify(data.rapbs));
+          
+          alert('Data berhasil diunggah dan dipulihkan!');
+          loadDasbor(); // Kembali ke dashboard untuk melihat perubahan
+
+        } catch (e) {
+          alert('Gagal memproses file. Pastikan file adalah JSON yang valid. Error: ' + e.message);
+        }
+      };
+      reader.readAsText(fileInput.files[0]);
+    }
+
+    // --- RAPBS ---
+    function loadBuatAkunRAPBS() { 
+      setActiveMenu('menu-buat-akun-rapbs'); 
+      const akunRAPBS = JSON.parse(localStorage.getItem('akunRAPBS')) || [];
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Buat Akun RAPBS</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4">Tambah Akun RAPBS Baru</h2>
+          <form id="formAkunRAPBS" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col"><label class="text-sm mb-1">Nama Akun RAPBS</label><input id="namaAkunRAPBS" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: BOS Reguler" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Keterangan (Opsional)</label><input id="keteranganAkunRAPBS" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: Bantuan dari pemerintah" /></div>
+            <div class="md:col-span-2"><button onclick="saveAkunRAPBS()" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded">Tambah Akun</button></div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar Akun RAPBS</h2>
+          <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-gray-700"><th class="pb-2">Nama Akun</th><th class="pb-2">Keterangan</th><th class="pb-2">Aksi</th></tr></thead><tbody id="tableAkunRAPBS">${akunRAPBS.length === 0 ? '<tr><td colspan="3" class="text-center py-4 text-gray-500">Belum ada akun RAPBS.</td></tr>' : akunRAPBS.map(a => `<tr class="border-b border-gray-700"><td class="py-2 font-semibold">${a.nama}</td><td class="py-2 text-gray-400 pl-4">${a.keterangan || '-'}</td><td class="py-2"><button onclick="deleteAkunRAPBS(${a.id})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button></td></tr>`).join('')}</tbody></table></div>
+        </div>
+      `; 
+    }
+    
+    function saveAkunRAPBS() { 
+      const n = document.getElementById('namaAkunRAPBS').value, 
+            k = document.getElementById('keteranganAkunRAPBS').value; 
+      if (!n) { alert('Nama akun harus diisi!'); return; } 
+      const a = { id: Date.now(), nama: n, keterangan: k }; 
+      const l = JSON.parse(localStorage.getItem('akunRAPBS')) || []; 
+      l.push(a); 
+      localStorage.setItem('akunRAPBS', JSON.stringify(l)); 
+      document.getElementById('formAkunRAPBS').reset(); 
+      loadBuatAkunRAPBS(); // Refresh tampilan
+      alert('Akun RAPBS berhasil ditambahkan!'); 
+    }
+    
+    function deleteAkunRAPBS(id) { 
+      if (confirm('Apakah Anda yakin ingin menghapus akun ini?')) { 
+        let l = JSON.parse(localStorage.getItem('akunRAPBS')) || []; 
+        l = l.filter(a => a.id !== id); 
+        localStorage.setItem('akunRAPBS', JSON.stringify(l)); 
+        loadBuatAkunRAPBS(); // Refresh tampilan
+      } 
+    }
+    
+    function saveRAPBS() { 
+      const a = document.getElementById('akunRAPBS').value, 
+            rapInput = document.getElementById('jumlahRAPBS').value,
+            dispensasiInput = document.getElementById('dispensasiRAPBS').value || '0',
+            i = document.getElementById('editIndex').value; 
+      
+      if (!a || !rapInput) { alert('Akun dan RAP harus diisi!'); return; } 
+      
+      // Parse nilai yang sudah diformat
+      const rap = parseFormattedNumber(rapInput);
+      const dispensasi = parseFormattedNumber(dispensasiInput);
+      
+      let r = JSON.parse(localStorage.getItem('rapbs')) || []; 
+      if (i !== '') { 
+        r[i] = { akun: a, jumlah: rap, dispensasi: dispensasi }; 
+        alert('Data RAPBS berhasil diperbarui!'); 
+      } else { 
+        r.push({ akun: a, jumlah: rap, dispensasi: dispensasi }); 
+        alert('Data RAPBS berhasil ditambahkan!'); 
+      } 
+      localStorage.setItem('rapbs', JSON.stringify(r)); 
+      loadInputRAPBS(); 
+    }
+
+    function loadInputRAPBS() { 
+      setActiveMenu('menu-input-rapbs'); 
+      const akunRAPBS = JSON.parse(localStorage.getItem('akunRAPBS')) || []; 
+      const rapbsData = JSON.parse(localStorage.getItem('rapbs')) || []; 
+      
+       // Hitung total RAPBS
+      const totalRAPBS = rapbsData.reduce((total, item) => total + item.jumlah, 0);
+      
+      document.getElementById('contentArea').innerHTML = `
+        <div class="flex justify-between items-center mb-6">
+          <h1 class="text-2xl font-semibold">Input RAPBS</h1>
+          <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 p-4 rounded-lg shadow-lg">
+            <div class="flex items-center">
+              <div>
+                <p class="text-indigo-100 text-sm">Total RAPBS</p>
+                <p class="text-2xl font-bold text-white">Rp ${formatNumber(totalRAPBS)}</p>
+              </div>
+              <i class="fas fa-chart-line text-3xl text-indigo-200 ml-4"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4" id="formTitle">Tambah Data RAPBS</h2>
+          <form id="formRAPBS" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input type="hidden" id="editIndex" value="">
+            <div class="flex flex-col"><label class="text-sm mb-1">Akun RAPBS</label><select id="akunRAPBS" class="bg-gray-900 border border-gray-700 p-2 rounded" required><option value="">-- Pilih Akun --</option></select></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">RAP (Rp)</label><input id="jumlahRAPBS" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded number-input" placeholder="0" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Dispensasi (Rp)</label><input id="dispensasiRAPBS" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded number-input" placeholder="0" /></div>
+            <div class="flex items-end"><button id="submitButton" onclick="saveRAPBS()" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded w-full">Simpan</button></div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar RAPBS</h2>
+          <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-gray-700"><th class="pb-2">Akun RAPBS</th><th class="pb-2 text-right">RAP</th><th class="pb-2 text-right">Dispensasi</th><th class="pb-2 text-right">Jumlah</th><th class="pb-2 text-center">Aksi</th></tr></thead><tbody id="tableRAPBS">${rapbsData.length === 0 ? '<tr><td colspan="5" class="text-center py-4 text-gray-500">Belum ada data RAPBS.</td></tr>' : rapbsData.map((item, index) => `<tr class="border-b border-gray-700"><td class="py-2">${item.akun}</td><td class="py-2 text-right pr-4">Rp ${formatNumber(item.jumlah)}</td><td class="py-2 text-right pr-4">Rp ${formatNumber(item.dispensasi || 0)}</td><td class="py-2 text-right pr-4 font-semibold">Rp ${formatNumber(item.jumlah - (item.dispensasi || 0))}</td><td class="py-2 text-center"><button onclick="editRAPBS(${index})" class="bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded text-sm mr-2">Edit</button><button onclick="deleteRAPBS(${index})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button></td></tr>`).join('')}</tbody></table></div>
+        </div>
+      `; 
+      populateAkunRAPBSDropdown();
+      initializeNumberInputs();
+    }
+    
+    function editRAPBS(index) { 
+      const r = JSON.parse(localStorage.getItem('rapbs')) || []; const item = r[index]; 
+      document.getElementById('editIndex').value = index; 
+      document.getElementById('formTitle').innerText = 'Update Data RAPBS'; 
+      document.getElementById('akunRAPBS').value = item.akun; 
+      document.getElementById('jumlahRAPBS').value = formatNumber(item.jumlah); 
+      document.getElementById('dispensasiRAPBS').value = formatNumber(item.dispensasi || 0);
+      const b = document.getElementById('submitButton'); b.innerText = 'Update'; b.className = 'bg-blue-600 hover:bg-blue-700 p-2 rounded w-full'; b.setAttribute('onclick', 'saveRAPBS()'); 
+      window.scrollTo(0, 0); 
+    }
+    
+    function deleteRAPBS(index) { 
+      if (confirm('Apakah Anda yakin?')) { 
+        let r = JSON.parse(localStorage.getItem('rapbs')) || []; 
+        r.splice(index, 1); 
+        localStorage.setItem('rapbs', JSON.stringify(r)); 
+        loadInputRAPBS(); 
+      } 
+    }
+
+    // --- RENCANA PENGELUARAN (DIPINDAH KE RAPBS) ---
+    function loadRencanaPengeluaran() {
+      // Buka submenu RAPBS jika belum terbuka
+      const rapbsSubmenu = document.getElementById('rapbs-submenu');
+      const rapbsArrow = document.getElementById('rapbs-arrow');
+      if (rapbsSubmenu && !rapbsSubmenu.classList.contains('active')) {
+        rapbsSubmenu.classList.add('active');
+        if (rapbsArrow) rapbsArrow.classList.add('rotate-90');
+        currentlyOpenSubmenu = rapbsSubmenu;
+      }
+      
+      setActiveMenu('menu-rencana-pengeluaran');
+      
+      const rencanaPengeluaran = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || [];
+      
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Rencana Pengeluaran</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4">Tambah Rencana Pengeluaran</h2>
+          <form id="formRencanaPengeluaran" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="flex flex-col">
+              <label class="text-sm mb-1">Akun Pengeluaran</label>
+              <select id="akunRencanaPengeluaran" class="bg-gray-900 border border-gray-700 p-2 rounded" required>
+                <option value="">-- Pilih Akun --</option>
+              </select>
+            </div>
+            <div class="flex flex-col">
+              <label class="text-sm mb-1">Jumlah (Rp)</label>
+              <input id="jumlahRencanaPengeluaran" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded number-input" placeholder="0" required />
+            </div>
+            <div class="flex flex-col">
+              <label class="text-sm mb-1">Keterangan</label>
+              <input id="keteranganRencanaPengeluaran" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="Keterangan rencana" />
+            </div>
+            <div class="md:col-span-3">
+              <button onclick="saveRencanaPengeluaran()" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded">Tambah Rencana</button>
+            </div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar Rencana Pengeluaran</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="border-b border-gray-700">
+                  <th class="pb-2">Akun</th>
+                  <th class="pb-2">Jumlah</th>
+                  <th class="pb-2">Keterangan</th>
+                  <th class="pb-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tableRencanaPengeluaran">
+                ${rencanaPengeluaran.length === 0 ? '<tr><td colspan="4" class="text-center py-4 text-gray-500">Belum ada rencana pengeluaran.</td></tr>' : rencanaPengeluaran.map((item, index) => `<tr class="border-b border-gray-700">
+                  <td class="py-2">${item.akun}</td>
+                  <td class="py-2 text-right pr-4">Rp ${formatNumber(item.jumlah)}</td>
+                  <td class="py-2">${item.keterangan || '-'}</td>
+                  <td class="py-2">
+                    <button onclick="editRencanaPengeluaran(${index})" class="bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded text-sm mr-2">Edit</button>
+                    <button onclick="deleteRencanaPengeluaran(${index})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      
+      // Isi dropdown dengan akun pengeluaran
+      populateAkunRencanaPengeluaranDropdown();
+      initializeNumberInputs();
+    }
+
+    function saveRencanaPengeluaran() {
+      const a = document.getElementById('akunRencanaPengeluaran').value,
+            jInput = document.getElementById('jumlahRencanaPengeluaran').value,
+            k = document.getElementById('keteranganRencanaPengeluaran').value;
+      
+      if (!a || !jInput) { 
+        alert('Akun dan Jumlah harus diisi!'); 
+        return; 
+      } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const r = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || []; 
+      r.push({ akun: a, jumlah: j, keterangan: k }); 
+      localStorage.setItem('rencanaPengeluaran', JSON.stringify(r)); 
+      loadRencanaPengeluaran();
+      alert('Rencana pengeluaran berhasil ditambahkan!'); 
+    }
+
+    function editRencanaPengeluaran(index) {
+      const r = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || [];
+      const item = r[index];
+      
+      // Isi form dengan data yang akan diedit
+      document.getElementById('akunRencanaPengeluaran').value = item.akun;
+      document.getElementById('jumlahRencanaPengeluaran').value = formatNumber(item.jumlah);
+      document.getElementById('keteranganRencanaPengeluaran').value = item.keterangan || '';
+      
+      // Ubah tombol menjadi update
+      const form = document.getElementById('formRencanaPengeluaran');
+      const existingButton = form.querySelector('button');
+      existingButton.innerHTML = 'Update Rencana';
+      existingButton.className = 'bg-blue-600 hover:bg-blue-700 p-2 rounded';
+      existingButton.onclick = function() { updateRencanaPengeluaran(index); };
+    }
+
+    function updateRencanaPengeluaran(index) {
+      const a = document.getElementById('akunRencanaPengeluaran').value,
+            jInput = document.getElementById('jumlahRencanaPengeluaran').value,
+            k = document.getElementById('keteranganRencanaPengeluaran').value;
+      
+      if (!a || !jInput) { 
+        alert('Akun dan Jumlah harus diisi!'); 
+        return; 
+      } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const r = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || []; 
+      r[index] = { akun: a, jumlah: j, keterangan: k }; 
+      localStorage.setItem('rencanaPengeluaran', JSON.stringify(r)); 
+      loadRencanaPengeluaran();
+      alert('Rencana pengeluaran berhasil diperbarui!'); 
+    }
+
+    function deleteRencanaPengeluaran(index) {
+      if (confirm('Apakah Anda yakin ingin menghapus rencana ini?')) {
+        const r = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || [];
+        r.splice(index, 1);
+        localStorage.setItem('rencanaPengeluaran', JSON.stringify(r));
+        loadRencanaPengeluaran();
+      }
+    }
+
+    // --- PENDAPATAN ---
+    function loadBuatAkun() { 
+      setActiveMenu('menu-buat-akun'); 
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Buat Akun Pendapatan diluar RAPBS</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4">Tambah Akun Baru</h2>
+          <form id="formAkun" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col"><label class="text-sm mb-1">Nama Akun</label><input id="namaAkun" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: SPP Bulanan" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Keterangan (Opsional)</label><input id="keteranganAkun" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: Pembayaran SPP tiap bulan" /></div>
+            <div class="md:col-span-2"><button onclick="saveAkun()" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded">Tambah Akun</button></div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar Akun Pendapatan</h2>
+          <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-gray-700"><th class="pb-2">Nama Akun</th><th class="pb-2">Keterangan</th><th class="pb-2">Aksi</th></tr></thead><tbody id="tableAkun"></tbody></table></div>
+        </div>
+      `; 
+      renderAkunTable(); 
+    }
+    
+    function loadInputPendapatan() { 
+      setActiveMenu('menu-input-pendapatan'); 
+      let pendapatan = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      pendapatan.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal)); 
+      
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Input Pendapatan</h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4" id="formTitle">Tambah Data Pendapatan</h2>
+          <form id="formPendapatan" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input type="hidden" id="editIndex" value="">
+            <div class="flex flex-col"><label class="text-sm mb-1">Tanggal</label><input id="tanggalPendapatan" type="date" class="bg-gray-900 border border-gray-700 p-2 rounded" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Akun</label><select id="akunPendapatan" class="bg-gray-900 border border-gray-700 p-2 rounded" required><option value="">-- Pilih Akun --</option></select></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Jumlah (Rp)</label><input id="jumlahPendapatan" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded number-input" placeholder="0" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Keterangan</label><input id="keteranganPendapatan" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: dari Ahmad Budi" /></div>
+            <div class="md:col-span-4 flex justify-between items-center">
+              <button id="submitButton" onclick="savePendapatan()" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded">Tambah</button>
+              <div class="text-right"><p>Total Semua Pendapatan: <span class="font-bold text-green-400">Rp ${formatNumber(getTotalPendapatan())}</span></p></div>
+            </div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar Pendapatan</h2>
+          <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-gray-700"><th class="pb-2">Tanggal</th><th class="pb-2">Akun</th><th class="pb-2">Jumlah</th><th class="pb-2">Keterangan</th><th class="pb-2">Aksi</th></tr></thead><tbody id="tablePendapatan">${pendapatan.map((item, index) => `<tr class="border-b border-gray-700"><td class="py-2">${formatDate(item.tanggal)}</td><td class="py-2">${item.akun}</td><td class="py-2 text-right pl-4">Rp ${formatNumber(item.jumlah)}</td><td class="py-2 pl-4">${item.keterangan || '-'}</td><td class="py-2"><button onclick="editPendapatan(${index})" class="bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded text-sm mr-2">Edit</button><button onclick="deletePendapatan(${index})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button></td></tr>`).join('')}</tbody></table></div>
+        </div>
+      `; 
+      populateAkunDropdown(); 
+      initializeNumberInputs();
+    }
+    
+    function savePendapatanData() { 
+      const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      if (p.length === 0) { alert('Tidak ada data pendapatan untuk disimpan.'); return; } 
+      let csvContent = "Tanggal,Akun,Jumlah,Keterangan\n"; 
+      p.forEach(item => { csvContent += `${item.tanggal},"${item.akun}",${item.jumlah},"${item.keterangan || ''}"\n`; }); 
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); 
+      const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", `data_pendapatan_${new Date().toISOString().slice(0, 10)}.csv`); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); 
+      alert('Data pendapatan berhasil diunduh!'); 
+    }
+    
+    function saveAkun() { 
+      const n = document.getElementById('namaAkun').value, k = document.getElementById('keteranganAkun').value; 
+      if (!n) { alert('Nama akun harus diisi!'); return; } 
+      const a = { id: Date.now(), nama: n, keterangan: k }; 
+      const l = JSON.parse(localStorage.getItem('akunPendapatan')) || []; 
+      l.push(a); 
+      localStorage.setItem('akunPendapatan', JSON.stringify(l)); 
+      document.getElementById('formAkun').reset(); 
+      renderAkunTable(); 
+      alert('Akun berhasil ditambahkan!'); 
+    }
+    
+    function deleteAkun(id) { 
+      if (confirm('Apakah Anda yakin ingin menghapus akun ini?')) { 
+        let l = JSON.parse(localStorage.getItem('akunPendapatan')) || []; 
+        l = l.filter(a => a.id !== id); 
+        localStorage.setItem('akunPendapatan', JSON.stringify(l)); 
+        renderAkunTable(); 
+      } 
+    }
+    
+    function renderAkunTable() { 
+      const l = JSON.parse(localStorage.getItem('akunPendapatan')) || []; 
+      const t = document.getElementById('tableAkun'); 
+      if (!t) return; 
+      if (l.length === 0) { t.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Belum ada akun pendapatan.</td></tr>'; return; } 
+      t.innerHTML = l.map(a => `<tr class="border-b border-gray-700"><td class="py-2 font-semibold">${a.nama}</td><td class="py-2 text-gray-400 pl-4">${a.keterangan || '-'}</td><td class="py-2"><button onclick="deleteAkun(${a.id})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button></td></tr>`).join(''); 
+    }
+    
+    function populateAkunDropdown() { 
+      const l = getAllAkunPendapatan(); // Menggunakan fungsi baru
+      const d = document.getElementById('akunPendapatan'); 
+      if (!d) return; 
+      d.innerHTML = '<option value="">-- Pilih Akun --</option>'; 
+      l.forEach(a => { d.innerHTML += `<option value="${a.nama}">${a.nama}</option>`; }); 
+    }
+    
+    function resetPendapatanForm() { 
+      document.getElementById('formPendapatan').reset(); 
+      document.getElementById('editIndex').value = ''; 
+      document.getElementById('formTitle').innerText = 'Tambah Data Pendapatan'; 
+      const b = document.getElementById('submitButton'); 
+      b.innerText = 'Tambah'; 
+      b.className = 'bg-green-600 hover:bg-green-700 p-2 rounded'; 
+      b.setAttribute('onclick', 'savePendapatan()'); 
+    }
+    
+    function editPendapatan(index) { 
+      const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      const i = p[index]; 
+      document.getElementById('editIndex').value = index; 
+      document.getElementById('formTitle').innerText = 'Update Data Pendapatan'; 
+      document.getElementById('tanggalPendapatan').value = i.tanggal; 
+      document.getElementById('akunPendapatan').value = i.akun; 
+      document.getElementById('jumlahPendapatan').value = formatNumber(i.jumlah); 
+      document.getElementById('keteranganPendapatan').value = i.keterangan || ''; 
+      
+      const b = document.getElementById('submitButton'); 
+      b.innerText = 'Update Data'; 
+      b.className = 'bg-blue-600 hover:bg-blue-700 p-2 rounded'; 
+      b.setAttribute('onclick', 'updatePendapatan()'); 
+      
+      window.scrollTo(0, 0); 
+    }
+    
+    function savePendapatan() { 
+      const t = document.getElementById('tanggalPendapatan').value, 
+            a = document.getElementById('akunPendapatan').value, 
+            jInput = document.getElementById('jumlahPendapatan').value, 
+            k = document.getElementById('keteranganPendapatan').value; 
+      
+      if (!t || !a || !jInput) { alert('Tanggal, Akun, dan Jumlah harus diisi!'); return; } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      p.push({ tanggal: t, akun: a, keterangan: k, jumlah: j }); 
+      localStorage.setItem('pendapatan', JSON.stringify(p)); 
+      loadInputPendapatan(); 
+      alert('Pendapatan berhasil ditambahkan!'); 
+    }
+    
+    function updatePendapatan() { 
+      const i = document.getElementById('editIndex').value, 
+            t = document.getElementById('tanggalPendapatan').value, 
+            a = document.getElementById('akunPendapatan').value, 
+            jInput = document.getElementById('jumlahPendapatan').value, 
+            k = document.getElementById('keteranganPendapatan').value; 
+      
+      if (!t || !a || !jInput) { alert('Tanggal, Akun, dan Jumlah harus diisi!'); return; } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      p[i] = { tanggal: t, akun: a, keterangan: k, jumlah: j }; 
+      localStorage.setItem('pendapatan', JSON.stringify(p)); 
+      loadInputPendapatan(); 
+      alert('Pendapatan berhasil diperbarui!'); 
+    }
+    
+    function deletePendapatan(index) { 
+      if (confirm('Apakah Anda yakin ingin menghapus data ini?')) { 
+        const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+        p.splice(index, 1); 
+        localStorage.setItem('pendapatan', JSON.stringify(p)); 
+        loadInputPendapatan(); 
+      } 
+    }
+
+    // --- PENGELUARAN ---
+    function loadBuatAkunPengeluaran() { 
+      setActiveMenu('menu-buat-akun-pengeluaran'); 
+      document.getElementById('contentArea').innerHTML = `
+        <h1 class="text-2xl font-semibold mb-4">Buat Akun Pengeluaran </h1>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+          <h2 class="text-xl font-semibold mb-4">Tambah Akun Baru</h2>
+          <form id="formAkunPengeluaran" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col"><label class="text-sm mb-1">Nama Akun</label><input id="namaAkunPengeluaran" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: Belanja ATK" required /></div>
+            <div class="flex flex-col"><label class="text-sm mb-1">Keterangan (Opsional)</label><input id="keteranganAkunPengeluaran" type="text" class="bg-gray-900 border border-gray-700 p-2 rounded" placeholder="contoh: Pengadaan alat tulis kantor" /></div>
+            <div class="md:col-span-2"><button onclick="saveAkunPengeluaran()" type="button" class="bg-red-600 hover:bg-red-700 p-2 rounded">Tambah Akun</button></div>
+          </form>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <h2 class="text-xl font-semibold mb-4">Daftar Akun Pengeluaran</h2>
+          <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-gray-700"><th class="pb-2">Nama Akun</th><th class="pb-2">Keterangan</th><th class="pb-2">Aksi</th></tr></thead><tbody id="tableAkunPengeluaran"></tbody></table></div>
+        </div>
+      `; 
+      renderAkunPengeluaranTable(); 
+    }
+    
+    function saveAkunPengeluaran() { 
+      const n = document.getElementById('namaAkunPengeluaran').value, k = document.getElementById('keteranganAkunPengeluaran').value; 
+      if (!n) { alert('Nama akun harus diisi!'); return; } 
+      const a = { id: Date.now(), nama: n, keterangan: k }; 
+      const l = JSON.parse(localStorage.getItem('akunPengeluaran')) || []; 
+      l.push(a); 
+      localStorage.setItem('akunPengeluaran', JSON.stringify(l)); 
+      document.getElementById('formAkunPengeluaran').reset(); 
+      renderAkunPengeluaranTable(); 
+      alert('Akun berhasil ditambahkan!'); 
+    }
+    
+    function deleteAkunPengeluaran(id) { 
+      if (confirm('Apakah Anda yakin?')) { 
+        let l = JSON.parse(localStorage.getItem('akunPengeluaran')) || []; 
+        l = l.filter(a => a.id !== id); 
+        localStorage.setItem('akunPengeluaran', JSON.stringify(l)); 
+        renderAkunPengeluaranTable(); 
+      } 
+    }
+    
+    function renderAkunPengeluaranTable() { 
+      const l = JSON.parse(localStorage.getItem('akunPengeluaran')) || []; 
+      const t = document.getElementById('tableAkunPengeluaran'); 
+      if (!t) return; 
+      if (l.length === 0) { t.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Belum ada akun pengeluaran.</td></tr>'; return; } 
+      t.innerHTML = l.map(a => `<tr class="border-b border-gray-700"><td class="py-2 font-semibold">${a.nama}</td><td class="py-2 text-gray-400 pl-4">${a.keterangan || '-'}</td><td class="py-2"><button onclick="deleteAkunPengeluaran(${a.id})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-sm">Hapus</button></td></tr>`).join(''); 
+    }
+    
+    let expandedAccount = null;
+    function loadInputPengeluaran(editIndex = null) { 
+      setActiveMenu('menu-input-pengeluaran'); 
+      const akunList = JSON.parse(localStorage.getItem('akunPengeluaran')) || []; 
+      const allPengeluaran = JSON.parse(localStorage.getItem('pengeluaran')) || [];
+      
+      // Hitung total semua pengeluaran
+      const totalAllPengeluaran = getTotalPengeluaran();
+      
+      if (editIndex !== null) {
+        const item = allPengeluaran[editIndex];
+        expandedAccount = item.akun;
+      }
+      
+      let html = `
+        <div class="flex justify-between items-center mb-6">
+          <h1 class="text-2xl font-semibold">Input Pengeluaran Per Akun</h1>
+          <div class="total-card p-4 rounded-lg shadow-lg">
+            <div class="flex items-center">
+              <div>
+                <p class="text-red-100 text-sm">Total Semua Pengeluaran</p>
+                <p class="text-2xl font-bold text-white">Rp ${formatNumber(totalAllPengeluaran)}</p>
+              </div>
+              <i class="fas fa-wallet text-3xl text-red-200 ml-4"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-gray-700">
+                <th class="pb-2 text-left">Akun Pengeluaran</th>
+                <th class="pb-2 text-right">Total Pengeluaran</th>
+                <th class="pb-2 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      akunList.forEach(akun => {
+        const total = getTotalByAccount(akun.nama, allPengeluaran);
+        const isExpanded = expandedAccount === akun.nama;
+        
+        html += `<tr class="border-b border-gray-700">
+          <td class="py-3 font-semibold">${akun.nama}</td>
+          <td class="py-3 text-right pr-4">Rp ${formatNumber(total)}</td>
+          <td class="py-3 text-center">
+            <button onclick="toggleExpandAccount('${akun.nama}')" class="bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded text-sm">
+              ${isExpanded ? 'Tutup Rincian' : 'Tambah Rincian'}
+            </button>
+          </td>
+        </tr>`;
+
+        if (isExpanded) {
+          const rincian = allPengeluaran.filter(p => p.akun === akun.nama);
+          rincian.sort((a,b) => new Date(a.tanggal) - new Date(b.tanggal));
+          
+          html += `<tr>
+            <td colspan="3" class="bg-gray-700 p-4">
+              <div class="mb-4">
+                <h3 class="text-lg font-semibold mb-2">Form Rincian: ${akun.nama}</h3>
+                <form id="formRincian" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <input type="hidden" id="editIndexRincian" value="">
+                  <div class="flex flex-col">
+                    <label class="text-sm mb-1">Tanggal</label>
+                    <input id="tanggalRincian" type="date" class="bg-gray-900 border border-gray-600 p-2 rounded" required />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="text-sm mb-1">Keterangan</label>
+                    <input id="keteranganRincian" type="text" class="bg-gray-900 border border-gray-600 p-2 rounded" placeholder="contoh: untuk keperluan ujian" required />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="text-sm mb-1">Jumlah (Rp)</label>
+                    <input id="jumlahRincian" type="text" class="bg-gray-900 border border-gray-600 p-2 rounded number-input" placeholder="0" required />
+                  </div>
+                  <div class="flex items-end">
+                    <button id="submitRincianButton" onclick="saveRincianPengeluaran('${akun.nama}')" type="button" class="bg-green-600 hover:bg-green-700 p-2 rounded w-full">Simpan</button>
+                  </div>
+                </form>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold mb-2">Daftar Pengeluaran ${akun.nama}</h3>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-sm">
+                    <thead>
+                      <tr class="border-b border-gray-600">
+                        <th class="pb-2">Tanggal</th>
+                        <th class="pb-2">Keterangan</th>
+                        <th class="pb-2">Jumlah</th>
+                        <th class="pb-2">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rincian.map((item, index) => { 
+                        const originalIndex = findTransactionIndex(item, allPengeluaran); 
+                        return `<tr class="border-b border-gray-600">
+                          <td class="py-2">${formatDate(item.tanggal)}</td>
+                          <td class="py-2 pl-4">${item.keterangan}</td>
+                          <td class="py-2 text-right pr-4">Rp ${formatNumber(item.jumlah)}</td>
+                          <td class="py-2">
+                            <button onclick="editRincianPengeluaran(${originalIndex})" class="bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded text-xs mr-1">Edit</button>
+                            <button onclick="deleteRincianPengeluaran(${originalIndex})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs">Hapus</button>
+                          </td>
+                        </tr>`; 
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>`;
+        }
+      });
+       if (akunList.length === 0) {
+        html += `<tr><td colspan="3" class="text-center py-8 text-gray-500">Belum ada akun pengeluaran. Silakan buat akun terlebih dahulu.</td></tr>`;
+      }
+
+      html += `</tbody></table></div>`;
+      
+      document.getElementById('contentArea').innerHTML = html;
+      initializeNumberInputs();
+      
+      if (editIndex !== null) {
+        requestAnimationFrame(() => {
+          const item = allPengeluaran[editIndex];
+          document.getElementById('editIndexRincian').value = editIndex;
+          document.getElementById('tanggalRincian').value = item.tanggal;
+          document.getElementById('keteranganRincian').value = item.keterangan;
+          document.getElementById('jumlahRincian').value = formatNumber(item.jumlah);
+          
+          const btn = document.getElementById('submitRincianButton');
+          btn.innerText = 'Update';
+          btn.className = 'bg-blue-600 hover:bg-blue-700 p-2 rounded w-full';
+          btn.setAttribute('onclick', `updateRincianPengeluaran(${editIndex})`);
+        });
+      }
+    }
+    
+    function toggleExpandAccount(accountName) {
+      if (expandedAccount === accountName) { expandedAccount = null; } else { expandedAccount = accountName; }
+      loadInputPengeluaran();
+    }
+    
+    function saveRincianPengeluaran(akun) { 
+      const t = document.getElementById('tanggalRincian').value, 
+            k = document.getElementById('keteranganRincian').value, 
+            jInput = document.getElementById('jumlahRincian').value; 
+      
+      if (!t || !k || !jInput) { alert('Semua field harus diisi!'); return; } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const p = JSON.parse(localStorage.getItem('pengeluaran')) || []; 
+      p.push({ tanggal: t, keterangan: k, jumlah: j, akun: akun }); 
+      localStorage.setItem('pengeluaran', JSON.stringify(p)); 
+      document.getElementById('formRincian').reset(); 
+      loadInputPengeluaran(); 
+      alert('Pengeluaran berhasil ditambahkan!'); 
+    }
+    
+    function editRincianPengeluaran(index) { loadInputPengeluaran(index); }
+
+    function updateRincianPengeluaran(index) { 
+      const t = document.getElementById('tanggalRincian').value, 
+            k = document.getElementById('keteranganRincian').value, 
+            jInput = document.getElementById('jumlahRincian').value; 
+      
+      if (!t || !k || !jInput) { alert('Semua field harus diisi!'); return; } 
+      
+      // Parse nilai yang sudah diformat
+      const j = parseFormattedNumber(jInput);
+      
+      const p = JSON.parse(localStorage.getItem('pengeluaran')) || []; 
+      p[index] = { ...p[index], tanggal: t, keterangan: k, jumlah: j }; 
+      localStorage.setItem('pengeluaran', JSON.stringify(p)); 
+      loadInputPengeluaran(); 
+      alert('Pengeluaran berhasil diperbarui!'); 
+    }
+
+    function deleteRincianPengeluaran(index) { 
+      if (confirm('Apakah Anda yakin ingin menghapus data ini?')) { 
+        const p = JSON.parse(localStorage.getItem('pengeluaran')) || []; 
+        p.splice(index, 1); 
+        localStorage.setItem('pengeluaran', JSON.stringify(p)); 
+        loadInputPengeluaran(); 
+      } 
+    }
+
+    // --- FUNGSI CETAK COVER ---
+    function loadCetakCover() {
+      setActiveMenu('menu-cetak-cover');
+      
+      // Tambahkan khusus untuk layout cetak
+      document.body.classList.remove('cover-print-layout');
+      
+      const profil = JSON.parse(localStorage.getItem('profilSekolah')) || {};
+      const today = new Date();
+      const dateString = `${today.getDate()} ${getMonthName(today.getMonth())} ${today.getFullYear()}`;
+      
+      document.getElementById('contentArea').innerHTML = `
+        <div class="no-print mb-4">
+          <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+            <i class="fas fa-print mr-2"></i>Cetak Cover
+          </button>
+        </div>
+        
+        <!-- Kontainer utama, tanpa shadow atau border untuk cetak -->
+        <div id="reportContent" class="bg-white text-gray-800 p-4">
+          <!-- Bagian Atas (Logo & Identitas) -->
+          <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 60vh;">
+            ${profil.logo ? `<img src="${profil.logo}" alt="Logo Sekolah" style="max-height: 120px; max-width: 120px; margin-bottom: 15px;">` : ''}
+            <h1 style="font-size: 22pt; font-weight: bold; margin: 2px 0;">${profil.lembaga || 'Nama Lembaga Induk'}</h1>
+            <h2 style="font-size: 26pt; font-weight: bold; margin: 2px 0;">${profil.sekolah || 'Nama Sekolah'}</h2>
+            <p style="font-size: 11pt; margin: 2px 0;">${profil.alamat || 'Alamat Sekolah'}</p>
+            
+            <div style="margin-top: 30px; border-top: 2px solid black; border-bottom: 2px solid black; padding: 8px 0; width: 80%;">
+              <h3 style="font-size: 18pt; font-weight: bold;">LAPORAN KEUANGAN</h3>
+              <p style="font-size: 14pt;">Tahun Anggaran ${profil.tahun || 'XXXX'}</p>
+            </div>
+          </div>
+
+          <!-- Bagian Bawah (Tanda Tangan) -->
+          <div class="signature-container" style="margin-top: 50px;">
+            <table width="100%" border="0">
+              <tr>
+                <td width="45%" align="center">
+                  <p style="margin-bottom: -5px;">Mengetahui,</p>
+                  <p style="font-weight: bold;">Kepala Sekolah</p>
+                  <br><br><br>
+                  <p style="margin-top: 2px; text-decoration: underline;">( ${profil.kepsek || ''} )</p>
+                  <p style="font-size: 10pt;">NIP. </p>
+                </td>
+                <td width="10%"></td>
+                <td width="45%" align="center">
+                  <p style="margin-bottom: -5px;">Menyetujui,</p>
+                  <p style="font-weight: bold;">Bendahara</p>
+                  <br><br><br>
+                  <p style="margin-top: 2px; text-decoration: underline;">( ${profil.bendahara || ''} )</p>
+                  <p style="font-size: 10pt;">NIP. </p>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- FUNGSI LAPORAN (DIPERBAIKI UNTUK KOP DAN FOOTER) ---
+    function getReportHeader(title) {
+      const profil = JSON.parse(localStorage.getItem('profilSekolah')) || {};
+      const laporanSettings = JSON.parse(localStorage.getItem('laporanSettings')) || {};
+      const reportDate = laporanSettings.tanggalLaporan ? formatDate(laporanSettings.tanggalLaporan) : formatDate(new Date());
+      
+      // Struktur baru dengan logo dan alamat
+      return `
+        <div class="kop-surat">
+          <table width="100%" border="0" cellpadding="5">
+            <tr>
+              <td width="15%" align="center" valign="top">
+                ${profil.logo ? `<img src="${profil.logo}" alt="Logo Sekolah" style="max-height: 80px; max-width: 80px;">` : ''}
+              </td>
+              <td width="70%" align="center">
+                <p style="font-size: 16pt; font-weight: bold; margin: 0;">${profil.lembaga || 'Nama Lembaga Induk'}</p>
+                <p style="font-size: 18pt; font-weight: bold; margin: 5px 0;">${profil.sekolah || 'Nama Sekolah'}</p>
+                <p style="font-size: 11pt; margin: 0;">${profil.alamat || 'Alamat Sekolah'}</p>
+                 <div class="signature-line" style="border-bottom: 2px solid black; height: -10px; margin-bottom: 10px;"></div>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+        </div>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="font-size: 16pt; font-weight: bold; margin: 10px 0;">${title}</h2>
+          <p style="font-size: 12pt;">Per Tanggal: ${reportDate}</p>
+        </div>
+      `;
+    }
+
+    function getReportFooter() {
+      const profil = JSON.parse(localStorage.getItem('profilSekolah')) || {};
+      const today = new Date();
+      const dateString = `${today.getDate()} ${getMonthName(today.getMonth())} ${today.getFullYear()}`;
+      return `
+        <div class="signature-container" style="page-break-inside: avoid; margin-top: 20px;">
+          <table width="100%" border="0">
+            <tr>
+              <td width="45%" align="center">
+                <p style="margin-bottom: -40px;">Mengetahui,</p>
+                <p style="font-weight: bold;">Kepala Sekolah</p>
+                <br><br><br>
+                <p style="margin-top: 2px;">( ${profil.kepsek || ''} )</p>
+                <p style="font-size: 10pt;">NIP. </p>
+              </td>
+              <td width="10%"></td>
+              <td width="45%" align="center">
+                <p style="margin-bottom: -40px;">Menyetujui,</p>
+                <p style="font-weight: bold;">Bendahara</p>
+               <br><br><br>
+                <p style="margin-top: 2px;">( ${profil.bendahara || ''} )</p>
+                <p style="font-size: 10pt;">NIP. </p>
+              </td>
+            </tr>
+          </table>
+          <div style="text-align: center; margin-top: 20px;">
+           
+          </div>
+        </div>
+      `;
+    }
+    
+    function getMonthName(monthIndex) {
+      const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      return months[monthIndex];
+    }
+
+    // 1. Laporan Pendapatan
+    function loadLaporanPendapatan() {
+      setActiveMenu('menu-laporan-pendapatan');
+      let pendapatan = JSON.parse(localStorage.getItem('pendapatan')) || [];
+      pendapatan.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+      let total = 0;
+      const tableRows = pendapatan.map(item => { total += item.jumlah; return `<tr class="border-b border-gray-300 print-break"><td class="py-2">${formatDate(item.tanggal)}</td><td class="py-2 pl-4">${item.akun}</td><td class="py-2 pl-4">${item.keterangan || '-'}</td><td class="py-2 text-right pr-4">Rp ${formatNumber(item.jumlah)}</td></tr>`; }).join('');
+      document.getElementById('contentArea').innerHTML = `
+        <div class="no-print mb-4 flex gap-2">
+          <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+            <i class="fas fa-print mr-2"></i>Cetak Laporan
+          </button>
+          <button onclick="saveLaporanAsPDF('pendapatan')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+            <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+          </button>
+        </div>
+        <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+          ${getReportHeader('LAPORAN PENDAPATAN')}
+          <div class="overflow-x-auto">
+            <table class="w-full text-left" style="border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid black;">
+                  <th class="pb-2" style="padding: 8px;">Tanggal</th>
+                  <th class="pb-2" style="padding: 8px;">Akun</th>
+                  <th class="pb-2" style="padding: 8px;">Keterangan</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Jumlah</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+              <tfoot>
+                <tr style="border-top: 2px solid black; font-weight: bold;">
+                  <td class="py-2 text-right" style="padding: 8px;" colspan="3">TOTAL PENDAPATAN</td>
+                  <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          ${getReportFooter()}
+        </div>
+      `;
+    }
+
+    // 2. Laporan Rekapitulasi Pengeluaran
+    function loadLaporanRekapPengeluaran() {
+      setActiveMenu('menu-laporan-rekap-pengeluaran');
+      const rekap = getRekapPengeluaran();
+      const total = getTotalPengeluaran();
+      const tableRows = rekap.map(item => `<tr class="border-b border-gray-300"><td class="py-2" style="padding: 8px;">${item.akun}</td><td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(item.total)}</td></tr>`).join('');
+      document.getElementById('contentArea').innerHTML = `
+        <div class="no-print mb-4 flex gap-2">
+          <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+            <i class="fas fa-print mr-2"></i>Cetak Laporan
+          </button>
+          <button onclick="saveLaporanAsPDF('pengeluaran')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+            <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+          </button>
+        </div>
+        <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+          ${getReportHeader('LAPORAN REKAPITULASI PENGELUARAN')}
+          <div class="overflow-x-auto">
+            <table class="w-full text-left" style="border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid black;">
+                  <th class="pb-2" style="padding: 8px;">Akun Pengeluaran</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Total</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+              <tfoot>
+                <tr style="border-top: 2px solid black; font-weight: bold;">
+                  <td class="py-2" style="padding: 8px;">TOTAL PENGELUARAN</td>
+                  <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          ${getReportFooter()}
+        </div>
+      `;
+    }
+    
+    // 3. Laporan Jurnal Umum - DIPERBAIKI DENGAN KOLOM KETERANGAN
+    function loadLaporanJurnal() {
+      setActiveMenu('menu-laporan-jurnal');
+      const pendapatan = JSON.parse(localStorage.getItem('pendapatan')) || [];
+      const pengeluaran = JSON.parse(localStorage.getItem('pengeluaran')) || [];
+      const allTransactions = [...pendapatan.map(p => ({ ...p, type: 'debet' })), ...pengeluaran.map(p => ({ ...p, type: 'kredit' }))].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+      let runningSaldo = 0; let nomorUrut = 1;
+      const tableRows = allTransactions.map(t => { 
+        const debet = t.type === 'debet' ? t.jumlah : 0; 
+        const kredit = t.type === 'kredit' ? t.jumlah : 0; 
+        runningSaldo += debet - kredit; 
+        return `<tr class="border-b border-gray-300 print-break">
+          <td class="py-2 text-center" style="padding: 8px;">${nomorUrut++}</td>
+          <td class="py-2" style="padding: 8px;">${formatDate(t.tanggal)}</td>
+          <td class="py-2 pl-4" style="padding: 8px;">${t.akun}</td>
+          <td class="py-2 pl-4" style="padding: 8px;">${t.keterangan || '-'}</td>
+          <td class="py-2 text-right pr-4" style="padding: 8px;">${debet > 0 ? `Rp ${formatNumber(debet)}` : ''}</td>
+          <td class="py-2 text-right pr-4" style="padding: 8px;">${kredit > 0 ? `Rp ${formatNumber(kredit)}` : ''}</td>
+          <td class="py-2 text-right pr-4 font-semibold" style="padding: 8px;">Rp ${formatNumber(runningSaldo)}</td>
+        </tr>`; 
+      }).join('');
+      document.getElementById('contentArea').innerHTML = `
+        <div class="no-print mb-4 flex gap-2">
+          <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+            <i class="fas fa-print mr-2"></i>Cetak Laporan
+          </button>
+          <button onclick="saveLaporanAsPDF('jurnal')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+            <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+          </button>
+        </div>
+        <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+          ${getReportHeader('LAPORAN JURNAL UMUM')}
+          <div class="overflow-x-auto">
+            <table class="w-full text-left" style="border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid black;">
+                  <th class="pb-2" style="padding: 8px;">No</th>
+                  <th class="pb-2" style="padding: 8px;">Tanggal</th>
+                  <th class="pb-2" style="padding: 8px;">Akun</th>
+                  <th class="pb-2" style="padding: 8px;">Keterangan</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Debet</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Kredit</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Saldo</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+          ${getReportFooter()}
+        </div>
+      `;
+    }
+
+    // 4. Laporan Rincian Pengeluaran
+    function loadLaporanRincianPengeluaran() {
+      setActiveMenu('menu-laporan-rincian-pengeluaran');
+      const akunList = JSON.parse(localStorage.getItem('akunPengeluaran')) || [];
+      const allPengeluaran = JSON.parse(localStorage.getItem('pengeluaran')) || [];
+      
+      let html = `<div class="no-print mb-4 flex gap-2">
+        <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+          <i class="fas fa-print mr-2"></i>Cetak Laporan
+        </button>
+        <button onclick="saveLaporanAsPDF('rincian-pengeluaran')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+          <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+        </button>
+      </div>
+      <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+        ${getReportHeader('LAPORAN RINCIAN PENGELUARAN')}`;
+      let grandTotal = 0;
+      akunList.forEach(akun => {
+        const rincian = allPengeluaran.filter(p => p.akun === akun.nama);
+        rincian.sort((a,b) => new Date(a.tanggal) - new Date(b.tanggal));
+        const total = rincian.reduce((sum, item) => sum + item.jumlah, 0);
+        grandTotal += total;
+        html += `<div class="mb-8 print-break" style="page-break-inside: avoid;">
+          <h3 class="text-lg font-semibold mb-3" style="border-bottom: 2px solid black; padding-bottom: 8px;">${akun.nama}</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm" style="border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 1px solid black;">
+                  <th class="pb-2" style="padding: 8px;">Tanggal</th>
+                  <th class="pb-2" style="padding: 8px;">Keterangan</th>
+                  <th class="pb-2 text-right" style="padding: 8px;">Jumlah</th>
+                </tr>
+              </thead>
+              <tbody>${rincian.map(item => `<tr class="border-b border-gray-200"><td class="py-2" style="padding: 8px;">${formatDate(item.tanggal)}</td><td class="py-2 pl-4" style="padding: 8px;">${item.keterangan}</td><td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(item.jumlah)}</td></tr>`).join('')}</tbody>
+              <tfoot>
+                <tr style="font-weight: bold;">
+                  <td class="py-2 text-right" style="padding: 8px;" colspan="2">Subtotal:</td>
+                  <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+      });
+      html += `<div style="border-top: 2px solid black; margin-top: 20px; padding-top: 10px;">
+        <div class="text-right">
+         <h3 class="text-sm font-bold">TOTAL SEMUA PENGELUARAN</h3>
+          <p class="text-sm font-bold">Rp ${formatNumber(grandTotal)}</p>
+        </div>
+      </div>${getReportFooter()}</div>`;
+      document.getElementById('contentArea').innerHTML = html;
+    }
+
+    function loadLaporanRugiLaba() {
+      setActiveMenu('menu-laporan-rugi-laba');
+      const totalPendapatan = getTotalPendapatan();
+      const totalPengeluaran = getTotalPengeluaran();
+      const labaRugi = totalPendapatan - totalPengeluaran;
+      
+      // Ambil data dari localStorage
+      const rapbsData = JSON.parse(localStorage.getItem('rapbs')) || [];
+      const pendapatanData = JSON.parse(localStorage.getItem('pendapatan')) || [];
+      
+      console.log('Data RAPBS:', rapbsData);
+      console.log('Data Pendapatan:', pendapatanData);
+      
+      // Definisikan kelas yang diharapkan dengan format yang sesuai dengan data Anda
+      const kelasList = [
+        'Penerimaan dari siswa Kelas 10',
+        'Penerimaan dari siswa Kelas 11', 
+        'Penerimaan dari siswa Kelas 12',
+        'Penerimaan Al Falahiyah'
+      ];
+      
+      // Buat array untuk tabel detail - DIPERBAIKI UNTUK REKAPITULASI PER AKUN
+      const kelasDetails = kelasList.map(kelas => {
+        // Cari data RAPBS untuk kelas ini
+        const rapbsItem = rapbsData.find(item => item.akun === kelas);
+        const rencana = rapbsItem ? rapbsItem.jumlah - (rapbsItem.dispensasi || 0) : 0;
+        
+        // REKAPITULASI: Jumlahkan semua transaksi pendapatan untuk akun ini
+        const realisasi = pendapatanData
+          .filter(item => item.akun === kelas)
+          .reduce((total, item) => total + item.jumlah, 0);
+        
+        return {
+          kelas: kelas,
+          rencana: rencana,
+          realisasi: realisasi
+        };
+      });
+      
+      // Hitung total
+      const totalRencana = kelasDetails.reduce((sum, item) => sum + item.rencana, 0);
+      const totalRealisasi = kelasDetails.reduce((sum, item) => sum + item.realisasi, 0);
+      const totalSelisih = totalRencana - totalRealisasi;
+      
+      // Buat tabel detail
+      const detailRows = kelasDetails.map((item, index) => `
+        <tr class="border-b border-gray-200">
+          <td class="py-2">${index + 1}</td>
+          <td class="py-2">${item.kelas}</td>
+          <td class="py-2 text-right pr-4">Rp ${formatNumber(item.rencana)}</td>
+          <td class="py-2 text-right pr-4">Rp ${formatNumber(item.realisasi)}</td>
+          <td class="py-2 text-right pr-4">${item.rencana > item.realisasi ? 'Rp ' + formatNumber(item.rencana - item.realisasi) : '-'}</td>
+        </tr>
+      `).join('');
+      
+      // Buat total baris
+      const totalRow = `
+        <tr class="border-t-2 border-gray-800 font-bold">
+          <td class="py-2" colspan="2">Total Dana Masih Di Siswa</td>
+          <td class="py-2 text-right pr-4">Rp ${formatNumber(totalRencana)}</td>
+          <td class="py-2 text-right pr-4">Rp ${formatNumber(totalRealisasi)}</td>
+          <td class="py-2 text-right pr-4">Rp ${formatNumber(totalSelisih)}</td>
+        </tr>
+      `;
+      
+      document.getElementById('contentArea').innerHTML = `
+        <div class="no-print mb-4 flex gap-2">
+          <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+            <i class="fas fa-print mr-2"></i>Cetak Laporan
+          </button>
+          <button onclick="saveLaporanAsPDF('rugi-laba')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+            <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+          </button>
+        </div>
+        <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+          ${getReportHeader('LAPORAN RUGI LABA')}
+          <div class="mt-8">
+            <table class="w-full text-left" style="border-collapse: collapse;">
+              <tbody>
+                <tr style="border-bottom: 1px solid black;">
+                  <td class="py-2 font-semibold" style="padding: 8px;">Pendapatan</td>
+                  <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(totalPendapatan)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid black;">
+                  <td class="py-2 font-semibold" style="padding: 8px;">Pengeluaran</td>
+                  <td class="py-2 text-right pr-4" style="padding: 8px;">(Rp ${formatNumber(totalPengeluaran)})</td>
+                </tr>
+                <tr style="border-top: 2px solid black; font-weight: bold; font-size: 16px;">
+                  <td class="py-3" style="padding: 8px;">Laba / Rugi</td>
+                  <td class="py-3 text-right pr-4" style="padding: 8px; color: ${labaRugi >= 0 ? 'green' : 'red'};">Rp ${formatNumber(labaRugi)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="mt-8">
+            <h3 class="text-lg font-semibold mb-4 border-b-2 border-gray-800 pb-2">Data Keuangan yang Belum Tertagih Periode Ini</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left" style="border-collapse: collapse;">
+                <thead>
+                  <tr style="border-bottom: 2px solid black;">
+                    <th class="pb-2" style="padding: 8px;">No</th>
+                    <th class="pb-2" style="padding: 8px;">Penerimaan</th>
+                    <th class="pb-2 text-right" style="padding: 8px;">Rencana</th>
+                    <th class="pb-2 text-right" style="padding: 8px;">Realisasi</th>
+                    <th class="pb-2 text-right" style="padding: 8px;">Jumlah</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${detailRows || '<tr><td colspan="5" class="text-center py-4 text-gray-500">Belum ada data keuangan yang belum tertagih.</td></tr>'}
+                </tbody>
+                <tfoot>
+                  ${totalRow}
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          
+          ${getReportFooter()}
+        </div>
+      `;
+    }
+
+    // 6. Laporan Realisasi Anggaran - DIPERBAIKI UNTUK MENGGUNAKAN DATA RAPBS TERBARU
+    function loadLaporanRealisasi() {
+      console.log('Memuat Laporan Realisasi...');
+      setActiveMenu('menu-laporan-realisasi');
+      
+      try {
+        // Ambil data dari localStorage
+        const rapbsData = JSON.parse(localStorage.getItem('rapbs')) || [];
+        const rencanaPengeluaran = JSON.parse(localStorage.getItem('rencanaPengeluaran')) || [];
+        const actualPendapatan = JSON.parse(localStorage.getItem('pendapatan')) || [];
+        const actualPengeluaran = JSON.parse(localStorage.getItem('pengeluaran')) || [];
+
+        console.log('Data RAPBS:', rapbsData);
+        console.log('Data Rencana Pengeluaran:', rencanaPengeluaran);
+        console.log('Data Pendapatan Aktual:', actualPendapatan);
+        console.log('Data Pengeluaran Aktual:', actualPengeluaran);
+
+        // Calculate actuals per account
+        const actualsPendapatanByAccount = {};
+        actualPendapatan.forEach(item => {
+          if (!actualsPendapatanByAccount[item.akun]) actualsPendapatanByAccount[item.akun] = 0;
+          actualsPendapatanByAccount[item.akun] += item.jumlah;
+        });
+
+        const actualsPengeluaranByAccount = {};
+        actualPengeluaran.forEach(item => {
+          if (!actualsPengeluaranByAccount[item.akun]) actualsPengeluaranByAccount[item.akun] = 0;
+          actualsPengeluaranByAccount[item.akun] += item.jumlah;
+        });
+
+        // Calculate budget (RAPBS) per account for Pendapatan
+        const anggaranPendapatanByAccount = {};
+        rapbsData.forEach(item => {
+          if (!anggaranPendapatanByAccount[item.akun]) anggaranPendapatanByAccount[item.akun] = 0;
+          // Hitung jumlah efektif setelah dispensasi
+          const jumlahEfektif = item.jumlah - (item.dispensasi || 0);
+          anggaranPendapatanByAccount[item.akun] += jumlahEfektif;
+        });
+
+        // Calculate budget (Rencana) per account for Pengeluaran
+        const anggaranPengeluaranByAccount = {};
+        rencanaPengeluaran.forEach(item => {
+          if (!anggaranPengeluaranByAccount[item.akun]) anggaranPengeluaranByAccount[item.akun] = 0;
+          anggaranPengeluaranByAccount[item.akun] += item.jumlah;
+        });
+
+        console.log('Anggaran Pendapatan:', anggaranPendapatanByAccount);
+        console.log('Anggaran Pengeluaran:', anggaranPengeluaranByAccount);
+        console.log('Realisasi Pendapatan:', actualsPendapatanByAccount);
+        console.log('Realisasi Pengeluaran:', actualsPengeluaranByAccount);
+
+        // Get all unique account names from both actuals and budget for Pendapatan
+        const allPendapatanAccounts = new Set([
+          ...Object.keys(actualsPendapatanByAccount),
+          ...Object.keys(anggaranPendapatanByAccount)
+        ]);
+
+        // Get all unique account names from both actuals and budget for Pengeluaran
+        const allPengeluaranAccounts = new Set([
+          ...Object.keys(actualsPengeluaranByAccount),
+          ...Object.keys(anggaranPengeluaranByAccount)
+        ]);
+
+        // Generate Pendapatan Table
+        let totalAnggaranPendapatan = 0;
+        let totalRealisasiPendapatan = 0;
+        const pendapatanRows = Array.from(allPendapatanAccounts).map(akun => {
+          const anggaran = anggaranPendapatanByAccount[akun] || 0;
+          const realisasi = actualsPendapatanByAccount[akun] || 0;
+          const persentase = anggaran > 0 ? ((realisasi / anggaran) * 100).toFixed(2) : (realisasi > 0 ? '100' : '0');
+          const selisih = anggaran - realisasi;
+          
+          totalAnggaranPendapatan += anggaran;
+          totalRealisasiPendapatan += realisasi;
+
+          return `
+            <tr class="border-b border-gray-300 print-break">
+              <td class="py-2" style="padding: 8px;">${akun}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(anggaran)}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(realisasi)}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">${persentase}%</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px; color: ${selisih >= 0 ? 'green' : 'red'};">Rp ${formatNumber(Math.abs(selisih))}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // Generate Pengeluaran Table
+        let totalAnggaranPengeluaran = 0;
+        let totalRealisasiPengeluaran = 0;
+        const pengeluaranRows = Array.from(allPengeluaranAccounts).map(akun => {
+          const anggaran = anggaranPengeluaranByAccount[akun] || 0;
+          const realisasi = actualsPengeluaranByAccount[akun] || 0;
+          const persentase = anggaran > 0 ? ((realisasi / anggaran) * 100).toFixed(2) : (realisasi > 0 ? '100' : '0');
+          const selisih = anggaran - realisasi;
+
+          totalAnggaranPengeluaran += anggaran;
+          totalRealisasiPengeluaran += realisasi;
+
+          return `
+            <tr class="border-b border-gray-300 print-break">
+              <td class="py-2" style="padding: 8px;">${akun}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(anggaran)}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(realisasi)}</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px;">${persentase}%</td>
+              <td class="py-2 text-right pr-4" style="padding: 8px; color: ${selisih >= 0 ? 'green' : 'red'};">Rp ${formatNumber(Math.abs(selisih))}</td>
+            </tr>
+          `;
+        }).join('');
+
+        const totalPersentasePendapatan = totalAnggaranPendapatan > 0 ? ((totalRealisasiPendapatan / totalAnggaranPendapatan) * 100).toFixed(2) : '0';
+        const totalPersentasePengeluaran = totalAnggaranPengeluaran > 0 ? ((totalRealisasiPengeluaran / totalAnggaranPengeluaran) * 100).toFixed(2) : '0';
+        const totalSelisihPendapatan = totalAnggaranPendapatan - totalRealisasiPendapatan;
+        const totalSelisihPengeluaran = totalAnggaranPengeluaran - totalRealisasiPengeluaran;
+        
+        document.getElementById('contentArea').innerHTML = `
+          <div class="no-print mb-4 flex gap-2">
+            <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+              <i class="fas fa-print mr-2"></i>Cetak Laporan
+            </button>
+            <button onclick="saveLaporanAsPDF('realisasi-anggaran')" class="bg-red-600 hover:bg-red-700 text-white p-2 rounded">
+              <i class="fas fa-file-pdf mr-2"></i>Backup PDF
+            </button>
+          </div>
+          <div id="reportContent" class="bg-white text-gray-800 p-8 rounded-lg shadow-lg">
+            ${getReportHeader('LAPORAN REALISASI ANGGARAN')}
+            
+            <div class="mb-8">
+              <h3 class="text-lg font-semibold mb-4 border-b-2 border-gray-800 pb-2">Realisasi Pendapatan</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left" style="border-collapse: collapse;">
+                  <thead>
+                    <tr style="border-bottom: 2px solid black;">
+                      <th class="pb-2" style="padding: 8px;">Akun</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Anggaran (RAPBS - Dispensasi)</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Realisasi</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">% Realisasi</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Selisih (Anggaran - Realisasi)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${pendapatanRows || '<tr><td colspan="5" class="text-center py-4 text-gray-500">Belum ada data anggaran atau realisasi pendapatan.</td></tr>'}
+                  </tbody>
+                  <tfoot>
+                    <tr style="border-top: 2px solid black; font-weight: bold;">
+                      <td class="py-2" style="padding: 8px;">TOTAL</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(totalAnggaranPendapatan)}</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(totalRealisasiPendapatan)}</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">${totalPersentasePendapatan}%</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px; color: ${totalSelisihPendapatan >= 0 ? 'green' : 'red'};">Rp ${formatNumber(Math.abs(totalSelisihPendapatan))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div class="mb-8">
+              <h3 class="text-lg font-semibold mb-4 border-b-2 border-gray-800 pb-2">Realisasi Pengeluaran</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left" style="border-collapse: collapse;">
+                  <thead>
+                    <tr style="border-bottom: 2px solid black;">
+                      <th class="pb-2" style="padding: 8px;">Akun</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Anggaran</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Realisasi</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">% Realisasi</th>
+                      <th class="pb-2 text-right" style="padding: 8px;">Selisih (Anggaran - Realisasi)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${pengeluaranRows || '<tr><td colspan="5" class="text-center py-4 text-gray-500">Belum ada data anggaran atau realisasi pengeluaran.</td></tr>'}
+                  </tbody>
+                  <tfoot>
+                    <tr style="border-top: 2px solid black; font-weight: bold;">
+                      <td class="py-2" style="padding: 8px;">TOTAL</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(totalAnggaranPengeluaran)}</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">Rp ${formatNumber(totalRealisasiPengeluaran)}</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px;">${totalPersentasePengeluaran}%</td>
+                      <td class="py-2 text-right pr-4" style="padding: 8px; color: ${totalSelisihPengeluaran >= 0 ? 'green' : 'red'};">Rp ${formatNumber(Math.abs(totalSelisihPengeluaran))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            
+            ${getReportFooter()}
+          </div>
+        `;
+      } catch (error) {
+        console.error('Error in loadLaporanRealisasi:', error);
+        document.getElementById('contentArea').innerHTML = `
+          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <p class="font-bold">Error</p>
+            <p>Gagal memuat laporan realisasi. Silakan cek console untuk detail error.</p>
+          </div>
+        `;
+      }
+    }
+
+    // --- FUNGSI HELPER ---
+    // DIPERBAIKI: Fungsi untuk menggabungkan akun dari RAPBS dan Akun Pendapatan
+    function getAllAkunPendapatan() {
+      const akunPendapatan = JSON.parse(localStorage.getItem('akunPendapatan')) || [];
+      const akunRAPBS = JSON.parse(localStorage.getItem('akunRAPBS')) || [];
+      return [...akunPendapatan, ...akunRAPBS];
+    }
+
+    // Fungsi serupa untuk dropdown RAPBS
+    function populateAkunRAPBSDropdown() {
+      const l = JSON.parse(localStorage.getItem('akunRAPBS')) || [];
+      const d = document.getElementById('akunRAPBS');
+      if (!d) return;
+      d.innerHTML = '<option value="">-- Pilih Akun --</option>';
+      l.forEach(a => { d.innerHTML += `<option value="${a.nama}">${a.nama}</option>`; });
+    }
+
+    // Fungsi serupa untuk dropdown Pengeluaran
+    function populateAkunPengeluaranDropdown() {
+      const l = JSON.parse(localStorage.getItem('akunPengeluaran')) || [];
+      const d = document.getElementById('akunPengeluaran');
+      if (!d) return;
+      d.innerHTML = '<option value="">-- Pilih Akun --</option>';
+      l.forEach(a => { d.innerHTML += `<option value="${a.nama}">${a.nama}</option>`; });
+    }
+
+    // Fungsi serupa untuk dropdown Rencana Pengeluaran
+    function populateAkunRencanaPengeluaranDropdown() {
+      const l = JSON.parse(localStorage.getItem('akunPengeluaran')) || [];
+      const d = document.getElementById('akunRencanaPengeluaran');
+      if (!d) return;
+      d.innerHTML = '<option value="">-- Pilih Akun --</option>';
+      l.forEach(a => { d.innerHTML += `<option value="${a.nama}">${a.nama}</option>`; });
+    }
+
+    function formatNumber(num) { 
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+    
+    function formatDate(dateString) { 
+      if (!dateString) return '-'; 
+      const date = new Date(dateString); 
+      const day = String(date.getDate()).padStart(2, '0'); 
+      const month = String(date.getMonth() + 1).padStart(2, '0'); 
+      const year = date.getFullYear(); 
+      return `${day}/${month}/${year}`; 
+    }
+    
+    function getTotalPendapatan() { 
+      const p = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      return p.reduce((t, i) => t + i.jumlah, 0); 
+    }
+    
+    function getTotalPengeluaran() { 
+      const p = JSON.parse(localStorage.getItem('pengeluaran')) || []; 
+      return p.reduce((t, i) => t + i.jumlah, 0); 
+    }
+    
+    function getSaldo() { 
+      return getTotalPendapatan() - getTotalPengeluaran(); 
+    }
+    
+    function getRekapPendapatan() { 
+      const pendapatan = JSON.parse(localStorage.getItem('pendapatan')) || []; 
+      const rekap = {}; 
+      pendapatan.forEach(item => { 
+        if (!rekap[item.akun]) { rekap[item.akun] = 0; } 
+        rekap[item.akun] += item.jumlah; 
+      }); 
+      return Object.keys(rekap).map(akun => ({ akun, total: rekap[akun] })); 
+    }
+    
+    function getRekapPengeluaran() { 
+      const pengeluaran = JSON.parse(localStorage.getItem('pengeluaran')) || []; 
+      const rekap = {}; 
+      pengeluaran.forEach(item => { 
+        if (!rekap[item.akun]) { rekap[item.akun] = 0; } 
+        rekap[item.akun] += item.jumlah; 
+      }); 
+      return Object.keys(rekap).map(akun => ({ akun, total: rekap[akun] })); 
+    }
+    
+    function getTotalByAccount(accountName, allPengeluaran) { 
+      return allPengeluaran.filter(p => p.akun === accountName).reduce((total, item) => total + item.jumlah, 0); 
+    }
+    
+    function findTransactionIndex(itemToFind, allPengeluaran) { 
+      return allPengeluaran.findIndex(p => p.tanggal === itemToFind.tanggal && p.keterangan === itemToFind.keterangan && p.jumlah === itemToFind.jumlah && p.akun === itemToFind.akun); 
+    }
+    
+    function saveAllData() {
+      const allData = { 
+        profilSekolah: JSON.parse(localStorage.getItem('profilSekolah')) || {}, 
+        laporanSettings: JSON.parse(localStorage.getItem('laporanSettings')) || {},
+        akunPendapatan: JSON.parse(localStorage.getItem('akunPendapatan')) || [], 
+        pendapatan: JSON.parse(localStorage.getItem('pendapatan')) || [], 
+        akunPengeluaran: JSON.parse(localStorage.getItem('akunPengeluaran')) || [], 
+        pengeluaran: JSON.parse(localStorage.getItem('pengeluaran')) || [],
+        rencanaPengeluaran: JSON.parse(localStorage.getItem('rencanaPengeluaran')) || [],
+        akunRAPBS: JSON.parse(localStorage.getItem('akunRAPBS')) || [],
+        rapbs: JSON.parse(localStorage.getItem('rapbs')) || []
+      };
+      const dataStr = JSON.stringify(allData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const link = document.createElement("a"); 
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url); 
+      link.setAttribute("download", `backup_data_sekolah_${new Date().toISOString().slice(0, 10)}.json`);
+      link.style.visibility = 'hidden'; 
+      document.body.appendChild(link); 
+      link.click(); 
+      document.body.removeChild(link);
+      alert('Data berhasil diunduh. Anda dapat mengunggah file ini untuk memulihkan data di kemudian hari.');
+    }
+    
+    // --- FUNGSI HELPER PDF (DIPERBAIKI UNTUK LOADING) ---
+    function saveLaporanAsPDF(reportType) {
+        const element = document.getElementById('reportContent');
+        if (!element) {
+            alert('Area laporan tidak ditemukan. Pastikan Anda berada di halaman laporan.');
+            return;
+        }
+        
+        // Tampilkan watermark untuk PDF
+        const watermark = document.querySelector('.watermark');
+        if (watermark) {
+          watermark.style.display = 'block';
+        }
+        
+        // Buat overlay loading
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.id = 'pdf-loading-overlay';
+        loadingOverlay.style.position = 'fixed';
+        loadingOverlay.style.top = '0';
+        loadingOverlay.style.left = '0';
+        loadingOverlay.style.width = '100%';
+        loadingOverlay.style.height = '100%';
+        loadingOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        loadingOverlay.style.color = 'white';
+        loadingOverlay.style.zIndex = '9999';
+        loadingOverlay.style.display = 'flex';
+        loadingOverlay.style.justifyContent = 'center';
+        loadingOverlay.style.alignItems = 'center';
+        loadingOverlay.style.fontSize = '1.5em';
+        loadingOverlay.innerHTML = '<div><i class="fas fa-spinner fa-spin mr-3"></i>Sedang membuat PDF, mohon tunggu...</div>';
+        document.body.appendChild(loadingOverlay);
+
+        // Beri jeda agar UI terupdate
+        setTimeout(() => {
+            html2canvas(element, { 
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              allowTaint: true
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgWidth = 210; // A4 width in mm
+                const pageHeight = 295; // A4 height in mm
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+                let pageNumber = 1;
+
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                // Tambahkan nomor halaman pada halaman pertama
+                pdf.setPage(pageNumber);
+                pdf.setFontSize(10);
+                pdf.text(`Halaman ${pageNumber}`, pdf.internal.pageSize.getWidth() - 20, pdf.internal.pageSize.getHeight() - 10);
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pageNumber++;
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    
+                    // Tambahkan nomor halaman
+                    pdf.setPage(pageNumber);
+                    pdf.setFontSize(10);
+                    pdf.text(`Halaman ${pageNumber}`, pdf.internal.pageSize.getWidth() - 20, pdf.internal.pageSize.getHeight() - 10);
+                    
+                    heightLeft -= pageHeight;
+                }
+                
+                // Hapus overlay
+                document.body.removeChild(loadingOverlay);
+                
+                // Sembunyikan watermark kembali
+                if (watermark) {
+                  watermark.style.display = 'none';
+                }
+
+                pdf.save(`laporan_${reportType}_${new Date().toISOString().slice(0, 10)}.pdf`);
+            }).catch(error => {
+                console.error('Error generating PDF:', error);
+                alert('Gagal membuat PDF. Silakan coba lagi atau periksa konsol untuk detail error.');
+                document.body.removeChild(loadingOverlay);
+                
+                // Sembunyikan watermark kembali
+                if (watermark) {
+                  watermark.style.display = 'none';
+                }
+            });
+        }, 100);
+    }
+    
+    // Initialize with Dashboard
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hilangkan loading state setelah DOM siap
+      const loadingState = document.getElementById('loadingState');
+      if (loadingState) {
+        loadingState.style.display = 'none';
+      }
+      
+      // Load dashboard
+      loadDasbor();
+    });
+    
+    // Fallback jika DOMContentLoaded tidak berjalan
+    window.onload = function() { 
+      const loadingState = document.getElementById('loadingState');
+      if (loadingState && loadingState.style.display !== 'none') {
+        loadingState.style.display = 'none';
+        loadDasbor();
+      }
+    };
+  </script>
+</body>
+</html>
